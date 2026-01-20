@@ -1,0 +1,11 @@
+{
+  "lint": {
+    "jshint": ".github/jshint.json",
+    "_": [
+      "*.json",
+      "*.mjs",
+      ".github/*.json",
+      "lib/*.mjs"
+    ]
+  }
+}

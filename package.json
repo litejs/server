@@ -1,0 +1,50 @@
+{
+  "name": "@litejs/server",
+  "version": "26.0.0",
+  "type": "module",
+  "description": "Server for LiteJS full-stack framework",
+  "license": "MIT",
+  "author": "Lauri Rooden <lauri@rooden.ee>",
+  "keywords": [
+    "litejs",
+    "framework",
+    "http",
+    "server",
+    "content negotiation",
+    "accept",
+    "multipart",
+    "uploads",
+    "form-data"
+  ],
+  "homepage": "https://litejs.com",
+  "repository": "github:litejs/server",
+  "main": "index.mjs",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "imports": {
+    "#env": {
+      "bun": "./lib/bun.mjs",
+      "deno": "./lib/deno.mjs",
+      "node": "./lib/node.mjs",
+      "workerd": "./lib/cloudflare.mjs"
+    },
+    "#sqlite": {
+      "bun": "bun:sqlite",
+      "default": "./lib/sqlite.mjs"
+    }
+  },
+  "files": [
+    "*.mjs",
+    "lib/*.mjs"
+  ],
+  "scripts": {
+    "bundle": "esbuild app.mjs --bundle --minify --format=esm --outfile=bundle.js",
+    "test": "lj t --no-color 'test/*.mjs'",
+    "test:e2e": "node test/server/e2e.mjs"
+  },
+  "sideEffects": false,
+  "devDependencies": {
+    "@litejs/cli": "26.6.0"
+  }
+}

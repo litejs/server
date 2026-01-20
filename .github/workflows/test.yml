@@ -1,0 +1,65 @@
+name: Test
+on: [ push, pull_request, workflow_dispatch ]
+jobs:
+  Coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-node@v6
+    - run: npm install --no-audit
+    - run: npm audit --audit-level=low
+    - run: npx c8 -r lcovonly -r text --check-coverage --100 npm test
+    - run: npx lj lint
+    - uses: coverallsapp/github-action@v2
+      name: Upload to coveralls.io
+      with:
+        github-token: ${{ github.token }}
+  Test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { os: ubuntu-latest, node: 26 }
+        - { os: macos-latest, node: 24 }
+        - { os: windows-latest, node: 22 }
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-node@v6
+      with:
+        node-version: ${{ matrix.node }}
+    - run: npm install --no-audit
+    - run: npx lj t 'test/*.mjs'
+      shell: bash
+  Bun:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: oven-sh/setup-bun@v2
+    - run: bun i
+    - run: bun x --bun lj t 'test/*.mjs'
+  Deno:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: denoland/setup-deno@v2
+    - run: deno install
+    - run: deno run -A node_modules/@litejs/cli/cli.js t 'test/*.mjs'
+  E2E:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-node@v6
+    - uses: oven-sh/setup-bun@v2
+    - uses: denoland/setup-deno@v2
+    - run: npm install --no-audit
+    - run: npm install --global wrangler
+    - run: npm run test:e2e
+      env:
+        CI: "1"
+        WRANGLER_SEND_METRICS: "false"
+  Release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [Bun, Deno, Coverage, E2E, Test]
+    uses: litejs/.github/.github/workflows/release.yml@main
+    secrets: inherit

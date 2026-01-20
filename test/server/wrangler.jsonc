@@ -1,0 +1,28 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "litejs-server-test",
+	"main": "cloudflare.mjs",
+	"compatibility_date": "2025-09-27",
+	"assets": {
+		// The path to the directory containing the `index.html` file to be served at `/`
+		"directory": "./public"
+	},
+	"kv_namespaces": [
+		{ "binding": "KV", "id": "e2e" }
+	],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "COUNTER", "class_name": "Counter" }
+		]
+	},
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": ["Counter"] }
+	],
+	"observability": {
+		"enabled": true
+	}
+}

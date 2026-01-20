@@ -1,0 +1,8 @@
+/.env
+/.nyc_output
+/coverage
+/test/server/build
+/wiki
+.wrangler
+node_modules
+

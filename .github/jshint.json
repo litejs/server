@@ -1,0 +1,18 @@
+{
+  "asi": true,
+  "esversion": 11,
+  "evil": true,
+  "laxcomma": true,
+  "maxdepth": 6,
+  "node": true,
+  "nonbsp": true,
+  "nonew": true,
+  "nonstandard": true,
+  "quotmark": "single",
+  "shadow": "outer",
+  "undef": true,
+  "unused": true,
+  "globals": {
+    "Promise": true
+  }
+}
