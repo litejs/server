@@ -12,8 +12,8 @@ var UNDEF
 	}
 }
 , b64Arr = str => Uint8Array.from(b64Raw(str), c => c.charCodeAt(0))
-, b64Dec = str => toUtf8(b64Raw(str))
-, b64Enc = buf => btoa(isStr(buf) ? toLatin1(buf) : String.fromCharCode(...toUint(buf)))
+, b64Dec = str => decodeURIComponent(escape(b64Raw(str)))
+, b64Enc = buf => btoa(isStr(buf) ? unescape(encodeURIComponent(buf)) : String.fromCharCode(...toUint(buf)))
 , b64Url = buf => b64Enc(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 , fail = msg => { throw Error(msg) }
 , hasOwn = Object.hasOwn
@@ -43,8 +43,6 @@ var UNDEF
 	val instanceof ArrayBuffer || isArr(val) ? new Uint8Array(val) :
 	ENC.encode(isStr(val) ? val : JSON.stringify(val))
 )
-, toUtf8 = s => decodeURIComponent(escape(s))
-, toLatin1 = s => unescape(encodeURIComponent(s))
 
 
 export {
