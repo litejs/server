@@ -83,8 +83,29 @@ describe('serveStatic', () => {
 		assert.equal(res.status, 404)
 	})
 
+	test('dotfiles are not served', async (assert) => {
+		await fs.writeFile(path.join(testDir, '.env'), 'SECRET=1')
+		await fs.mkdir(path.join(testDir, '.git'), { recursive: true })
+		await fs.writeFile(path.join(testDir, '.git', 'config'), 'cfg')
+		const assets = serveStatic(testDir)
+		assert.equal((await assets.fetch(new Request('http://localhost/.env'))).status, 404)
+		assert.equal((await assets.fetch(new Request('http://localhost/.git/config'))).status, 404)
+	})
+
+	test('.well-known is served', async (assert) => {
+		await fs.mkdir(path.join(testDir, '.well-known'), { recursive: true })
+		await fs.writeFile(path.join(testDir, '.well-known', 'security.txt'), 'Contact: x')
+		const assets = serveStatic(testDir)
+		const res = await assets.fetch(new Request('http://localhost/.well-known/security.txt'))
+		assert.equal(res.status, 200)
+		assert.equal(await res.text(), 'Contact: x')
+		// A lookalike prefix is not a bypass.
+		assert.equal((await assets.fetch(new Request('http://localhost/.well-known-evil'))).status, 404)
+	})
+
 	test('cleanup', async (assert) => {
 		await fs.rm(testDir, { recursive: true, force: true })
 		assert.ok(true)
 	})
 })
+
