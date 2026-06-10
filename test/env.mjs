@@ -83,6 +83,7 @@ describe('setupShutdown', () => {
 
 		handlers.uncaughtException(new Error('boom'))
 		assert.equal(closed, 3, 'uncaughtException closes the server')
+
 		// An error without a stack falls back to name/message formatting.
 		handlers.uncaughtException({ message: 'no stack' })
 		assert.equal(closed, 4, 'uncaughtException without a stack still shuts down')
