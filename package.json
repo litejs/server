@@ -41,7 +41,7 @@
   "scripts": {
     "bundle": "esbuild app.mjs --bundle --minify --format=esm --outfile=bundle.js",
     "test": "lj t --no-color 'test/*.mjs'",
-    "test:e2e": "node test/server/e2e.mjs"
+    "test:e2e": "cd test/server/ && npm i && node e2e.mjs"
   },
   "sideEffects": false,
   "devDependencies": {

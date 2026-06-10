@@ -25,7 +25,8 @@ describe('e2e {0} ' + base, [
 	[ 'node', process.execPath, 'run:node', 10000 ],
 	[ 'bun', 'bun', 'run:bun', 10000 ],
 	[ 'deno', 'deno', 'run:deno', 10000 ],
-	[ 'cloudflare', 'wrangler', 'run:cloudflare', 60000 ],
+	[ 'workerd', cwd + '/node_modules/.bin/workerd', 'run:workerd', 20000 ],
+	[ 'wrangler', 'wrangler', 'run:wrangler', 60000 ],
 ], (name, cmd, script, bootTime) => {
 
 	describe(name, command(cmd) && (() => {
@@ -33,11 +34,15 @@ describe('e2e {0} ' + base, [
 		test('start', async assert => {
 			assert.setTimeout(bootTime)
 			child = spawn('npm', ['run', '--silent', script], { cwd, detached: true })
+			var errors = ''
+			child.stderr.on('data', d => errors += d)
 			var deadline = Date.now() + bootTime
-			while (Date.now() < deadline) {
+			// Stop polling as soon as the launcher exits, so a failed build or a
+			// missing binary surfaces its stderr instead of a bare timeout.
+			while (Date.now() < deadline && child.exitCode === null) {
 				try { return await get('/') } catch { await sleep(100) }
 			}
-			throw new Error('server did not respond within timeout')
+			throw new Error('server did not respond\n' + errors)
 		})
 		test('run', async assert => {
 			assert.setTimeout(5000)

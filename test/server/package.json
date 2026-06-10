@@ -3,18 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "npm run build:node && npm run build:bun && npm run build:deno && npm run build:cloudflare && npm run build:sw",
+    "build": "npm run build:node && npm run build:bun && npm run build:deno && npm run build:wrangler && npm run build:workerd && npm run build:sw",
     "build:bun": "esbuild run.mjs --bundle --format=esm --target=es2022 --conditions=bun --platform=node --packages=external --outfile=build/bun.mjs",
-    "build:cloudflare": "esbuild app.mjs --bundle --format=esm --target=es2022 --conditions=cloudflare --outfile=build/cloudflare.mjs",
     "build:deno": "esbuild run.mjs --bundle --format=esm --target=es2022 --conditions=deno --platform=node --packages=external --outfile=build/deno.mjs",
     "build:node": "esbuild run.mjs --bundle --format=esm --target=es2022 --platform=node --packages=external --outfile=build/node.mjs",
-    "build:sw": "esbuild run-sw.mjs --bundle --format=esm --target=es2022 --platform=browser --packages=external --outfile=build/sw.mjs",
+    "build:sw": "esbuild sw.mjs --bundle --format=esm --target=es2022 --platform=browser --packages=external --outfile=build/sw.mjs",
+    "build:workerd": "esbuild workerd.mjs --bundle --format=esm --target=es2022 --conditions=workerd --external:cloudflare:* --outfile=build/workerd.mjs",
+    "build:wrangler": "esbuild app.mjs --bundle --format=esm --target=es2022 --conditions=workerd --external:cloudflare:* --outfile=build/wrangler.mjs",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "run:bun": "bun run.mjs",
-    "run:cloudflare": "wrangler dev --port 8081 --ip 127.0.0.1",
     "run:deno": "deno run --allow-env --allow-net --allow-read --allow-write run.mjs",
     "run:node": "node run.mjs",
+    "run:workerd": "npm run --silent build:workerd && mkdir -p build/do && workerd serve workerd.capnp",
+    "run:wrangler": "wrangler dev --port 8081 --ip 127.0.0.1",
     "start": "wrangler dev"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.0",
+    "workerd": "1.20260611.1"
   }
 }
