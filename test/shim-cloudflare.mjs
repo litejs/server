@@ -979,6 +979,9 @@ describe('cron', () => {
 		['30 8 15 6 3', 4, [3]],
 		['*/15 * * * *', 0, [0, 15, 30, 45]],
 		['* * * * 1-5', 4, [1, 2, 3, 4, 5]],
+		['30 8 15 JUN WED', 3, [6]],
+		['30 8 15 JUN WED', 4, [4]],
+		['* * * * mon-fri', 4, [2, 3, 4, 5, 6]],
 		['1/2 * * * *', 0, [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59]],
 		['10-30/5 * * * *', 0, [10, 15, 20, 25, 30]],
 		['0 1,3,5 * * *', 1, [1, 3, 5]],
@@ -1006,6 +1009,10 @@ describe('cron', () => {
 			['* * * * *', +new Date(2026, 1, 10, 14, 10, 0), 1], // fires 14:11, minute < 30 (low half)
 			['* * * * *', +new Date(2026, 1, 10, 14, 40, 0), 1], // fires 14:41, minute >= 30 (high half)
 			['0 0 30 2 *', +new Date(2026, 1, 10, 14, 30, 0), 0], // Feb 30 never exists, so this never matches
+			['* * * * 3', +new Date(2026, 1, 10, 14, 10, 0), 1], // 2026-02-10 is a Tuesday (CF dow 3): matches
+			['* * * * 2', +new Date(2026, 1, 10, 14, 10, 0), 0], // Monday-only (dow 2) does not fire on Tuesday
+			['* * * * 1', +new Date(2026, 1, 8, 14, 10, 0), 1],  // 2026-02-08 is a Sunday: CF dow 1 matches
+			['* * * * SAT', +new Date(2026, 1, 7, 14, 10, 0), 1], // 2026-02-07 is a Saturday: SAT = dow 7
 		], (cron, start, expected, assert, mock) => {
 			mock.swap(console, 'log', ()=>{})
 			mock.time(start) // Tuesday 2026-02-10
