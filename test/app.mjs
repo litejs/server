@@ -247,6 +247,8 @@ describe('router', () => {
 		[() => 'sync', 'sync', undefined],
 		[async () => 'async', 'async', undefined],
 		['literal-value', 'literal-value', undefined],
+		[() => ({ a: 1 }), { a: 1 }, undefined], // object without body/status is wrapped
+		[() => [1, 2], [1, 2], undefined],
 		[() => ({ body: 'created', status: 201 }), 'created', 201],
 	], async (handler, expectedBody, expectedStatus, assert) => {
 		var r2 = Router()

@@ -1,141 +1,117 @@
 
 import '@litejs/cli/test.js'
-import { App } from '../app.mjs'
 import { worker } from '../lib/worker.mjs'
 
 describe('worker adapter', () => {
-	function send(w, path, opts) {
-		return w(new Request('http://localhost' + path, opts))
+	function send(handler, path, opts, env) {
+		return worker(handler)(new Request('http://localhost' + path, opts), env)
 	}
 
-	test('wraps handler results in a Response with the right content-type', [
-		[() => 'plain', 'plain', 'text/plain'],
-		[() => ({ a: 1 }), '{"a":1}', 'application/json'],
-		[() => [1, 2], '[1,2]', 'application/json'],
-	], async (handler, expectedBody, expectedType, assert) => {
-		var app = App()
-		app.get('r', handler)
-		var res = await send(worker(app), '/r')
+	test('normalizes a handler result to a {1} Response with body {2}', [
+		[() => ({ body: 'plain' }), 200, 'plain', 'text/plain'],
+		[() => ({ body: { a: 1 } }), 200, '{"a":1}', 'application/json'],
+		[() => 204, 204, '', null], // a number becomes a bare status
+		[() => undefined, 200, '', null], // a falsy result becomes an empty 200
+		[() => 100, 500, '', null], // an out-of-range status falls back to 500
+		// app handlers may return e.g. `status: err.code` where code is a string.
+		[() => ({ body: 'x', status: 'ENOENT' }), 500, 'x', 'text/plain'],
+	], async (handler, expectedStatus, expectedBody, expectedType, assert) => {
+		var res = await send(handler, '/')
 		assert.ok(res instanceof Response)
-		assert.equal(res.status, 200)
+		assert.equal(res.status, expectedStatus)
 		assert.equal(await res.text(), expectedBody)
 		assert.equal(res.headers.get('content-type'), expectedType)
 	})
 
 	test('full response object sets status, body and headers', async (assert) => {
-		var app = App()
-		app.get('html', () => ({ body: '<p>hi</p>', status: 201, headers: { 'content-type': 'text/html' } }))
-		var res = await send(worker(app), '/html')
+		var res = await send(() => ({ body: '<p>hi</p>', status: 201, headers: { 'content-type': 'text/html' } }), '/')
 		assert.equal(res.status, 201)
 		assert.equal(await res.text(), '<p>hi</p>')
 		assert.equal(res.headers.get('content-type'), 'text/html', 'handler content-type is not overridden')
 	})
 
-	test('thrown error maps to 500 with JSON error body', async (assert) => {
-		var app = App()
-		app.get('boom', () => { throw new Error('nope') })
-		var res = await send(worker(app), '/boom')
-		assert.equal(res.status, 500)
-		assert.equal(await res.text(), '{"error":"nope"}')
-		assert.equal(res.headers.get('content-type'), 'application/json')
-	})
-
 	test('a returned Response is passed through unchanged', async (assert) => {
-		var app = App()
-		app.get('raw', () => new Response('raw body', { status: 207 }))
-		var res = await send(worker(app), '/raw')
+		var res = await send(() => new Response('raw body', { status: 207 }), '/')
 		assert.equal(res.status, 207)
 		assert.equal(await res.text(), 'raw body')
 	})
 
-	test('request is patched with path, query, origin and searchParams', async (assert) => {
-		var app = App()
-		app.get('q', (req) => ({
+	test('a stream body is passed through without serialization', async (assert) => {
+		var res = await send(() => ({ body: new Blob(['streamed']).stream() }), '/')
+		assert.equal(await res.text(), 'streamed')
+		assert.equal(res.headers.get('content-type'), null, 'no content-type is forced')
+	})
+
+	test('request is patched with path, query, origin, header and searchParams', async (assert) => {
+		var res = await send(req => ({ body: {
 			path: req.path,
 			fullPath: req.fullPath,
 			query: req.query,
 			origin: req.origin,
 			x: req.searchParams.get('x'),
-		}))
-		var res = await send(worker(app), '/q?x=1&y=2')
+			h: req.header('x-test'),
+		} }), '/q?x=1&y=2', { headers: { 'x-test': 'value' } })
 		assert.equal(await res.json(), {
 			path: '/q',
 			fullPath: '/q',
 			query: 'x=1&y=2',
 			origin: 'http://localhost',
 			x: '1',
+			h: 'value',
 		})
-	})
-
-	test('req.header is a shorthand for headers.get', async (assert) => {
-		var app = App()
-		app.get('h', (req) => req.header('x-test'))
-		var res = await send(worker(app), '/h', { headers: { 'x-test': 'value' } })
-		assert.equal(await res.text(), 'value')
 	})
 
 	test('env merges defaults with per-request env, request wins', async (assert) => {
-		var app = App()
-		app.get('env', (req, env) => env.A + ',' + env.B)
-		var w = worker(app, { A: 'default', B: 'def' })
-		var res = await w(new Request('http://localhost/env'), { B: 'override' })
+		var w = worker((req, env) => ({ body: env.A + ',' + env.B }), { A: 'default', B: 'def' })
+		var res = await w(new Request('http://localhost/'), { B: 'override' })
 		assert.equal(await res.text(), 'default,override')
 	})
 
-	test('non-object handler results are normalized', async (assert) => {
-		var num = await worker(() => 204)(new Request('http://localhost/'))
-		assert.equal(num.status, 204, 'a number becomes a bare status')
-		assert.equal(await num.text(), '')
-
-		var empty = await worker(() => undefined)(new Request('http://localhost/'))
-		assert.equal(empty.status, 200, 'a falsy result becomes an empty 200')
-		assert.equal(await empty.text(), '')
+	test('a thrown error maps to 400 with the error message', async (assert) => {
+		var res = await send(() => { throw new Error('nope') }, '/')
+		assert.equal(res.status, 400)
+		assert.equal(await res.text(), '{"error":"nope"}')
+		assert.equal(res.headers.get('content-type'), 'application/json')
 	})
 
-	test('an error without a message still serializes', async (assert) => {
-		var app = App()
-		app.get('e', () => { throw new Error('') })
-		var res = await send(worker(app), '/e')
-		assert.equal(res.status, 500)
-		assert.equal(await res.text(), '{"error":{}}')
+	test('a 5xx error body is generic and logged server-side', async (assert, mock) => {
+		mock.swap(console, 'error', mock.fn())
+		var res = await send(() => ({ body: new Error('secret'), status: 503 }), '/')
+		assert.equal(res.status, 503)
+		assert.equal(await res.text(), '{"error":"Internal Server Error"}', 'internal message is not leaked')
+		assert.equal(res.headers.get('content-type'), 'application/json')
+		assert.equal(console.error.called, 1, 'error is logged server-side')
 	})
 
-	test('headers set on req.resHeaders appear in the response', async (assert) => {
-		var app = App()
-		app.get('rh', (req) => { req.resHeaders['x-foo'] = 'bar'; return 'ok' })
-		var res = await send(worker(app), '/rh')
-		assert.equal(res.headers.get('x-foo'), 'bar')
-		assert.equal(await res.text(), 'ok')
+	test('an error without stack or message falls back to the error itself', async (assert, mock) => {
+		mock.swap(console, 'error', mock.fn())
+		var err = new Error('')
+		err.stack = ''
+		var res = await send(() => ({ body: err, status: 503 }), '/')
+		assert.equal(await res.text(), '{"error":"Internal Server Error"}')
+		assert.equal(console.error.calls[0].args[0], err, 'the error itself is logged when stack is empty')
+
+		res = await send(() => { throw err }, '/')
+		assert.equal(res.status, 400)
+		assert.equal(await res.text(), '{"error":{}}', 'a messageless 4xx error serializes the error itself')
 	})
 
-	test('multiple set-cookie headers are preserved', async (assert) => {
-		var app = App()
-		app.get('rh', (req) => {
+	test('req.resHeaders and handler headers merge, set-cookie appends', async (assert) => {
+		var res = await send(req => {
+			req.resHeaders['x-foo'] = 'bar'
 			req.resHeaders['set-cookie'] = 'a=1'
 			req.resHeaders['Set-cookie'] = 'b=2'
 			return { body: 'ok', headers: { 'set-cookie': 'c=3' } }
-		})
-		var res = await send(worker(app), '/rh')
+		}, '/')
+		assert.equal(res.headers.get('x-foo'), 'bar')
 		assert.equal(res.headers.getSetCookie(), ['a=1', 'b=2', 'c=3'])
 		assert.equal(await res.text(), 'ok')
 	})
 
-	test('HEAD is routed to the GET handler with an empty body', async (assert) => {
-		var app = App()
-		app.get('hi', () => 'world')
-		var res = await send(worker(app), '/hi', { method: 'HEAD' })
+	test('HEAD strips the response body but keeps status and headers', async (assert) => {
+		var res = await send(() => ({ body: 'world' }), '/', { method: 'HEAD' })
 		assert.equal(res.status, 200)
-		assert.equal(res.headers.get('content-type'), 'text/plain', 'GET headers are preserved')
+		assert.equal(res.headers.get('content-type'), 'text/plain', 'headers are preserved')
 		assert.equal(await res.text(), '', 'body is stripped for HEAD')
 	})
-
-	test('a thrown request error maps to 400', async (assert) => {
-		var app = App()
-		app.get('x', () => 'ok')
-		// A relative url makes `new URL(req.url)` throw inside the try block.
-		var res = await worker(app)({ url: '/relative', method: 'GET', headers: new Headers() })
-		assert.equal(res.status, 400)
-		assert.equal(res.headers.get('content-type'), 'application/json')
-	})
-
 })
