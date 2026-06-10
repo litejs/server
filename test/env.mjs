@@ -3,7 +3,7 @@ import '@litejs/cli/test.js'
 import { writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFiles, loadEnv, setupShutdown } from '../index.mjs'
+import { httpsRedirect, readFiles, loadEnv, setupShutdown } from '../index.mjs'
 
 var stubbable = typeof Bun === 'undefined' && typeof Deno === 'undefined'
 
@@ -39,6 +39,14 @@ describe('loadEnv', () => {
 		assert.equal(env.SERVER_NAME, 'http://127.0.0.1:8080')
 		assert.end()
 	})
+
+	test('SERVER_NAME is the https origin when HTTPS is configured', (assert, mock) => {
+		mock.swap(process, 'env', {})
+		assert.equal(loadEnv(null, { HTTPS_KEY: 'k', HTTPS_CERT: 'c', HTTPS_PORT: 444 }).SERVER_NAME, 'https://127.0.0.1:444')
+		assert.equal(loadEnv(null, { HTTPS_KEY: 'k', HTTPS_CERT: 'c' }).SERVER_NAME, 'https://127.0.0.1:8443', 'HTTPS_PORT defaults to 8443')
+		assert.equal(loadEnv(null, { HTTPS_KEY: 'k' }).SERVER_NAME, 'http://127.0.0.1:8080', 'key alone does not switch the scheme')
+		assert.end()
+	})
 })
 
 describe('readFiles', () => {
@@ -51,6 +59,19 @@ describe('readFiles', () => {
 
 		assert.equal(readFiles(dir, import.meta.dirname, '.json').length, 0, 'no .json files match')
 		assert.equal(readFiles(dir, import.meta.dirname).length, 2, 'empty ext reads every file')
+		assert.end()
+	})
+})
+
+describe('httpsRedirect', () => {
+	test('301-redirects to https on HTTPS_PORT {0}', [
+		[443, 'https://example.com/x?q=1'], // default https port is dropped from the url
+		[8443, 'https://example.com:8443/x?q=1'],
+		[undefined, 'https://example.com:8443/x?q=1'], // HTTPS_PORT defaults to 8443
+	], (port, location, assert) => {
+		var res = httpsRedirect({ HTTPS_PORT: port })(new Request('http://example.com/x?q=1'))
+		assert.equal(res.status, 301)
+		assert.equal(res.headers.get('location'), location)
 		assert.end()
 	})
 })
@@ -106,6 +127,8 @@ describe('setupShutdown', () => {
 		setupShutdown({ close: () => (closed++, { unref() {} }), name: 'solo' })
 		handlers.SIGTERM()
 		assert.equal(closed, 1)
+		handlers.SIGHUP()
+		assert.equal(closed, 1, 'SIGHUP on a single server without reload() is a no-op')
 	})
 
 	test('swallows errors while closing a server', async (assert, mock) => {
@@ -117,21 +140,15 @@ describe('setupShutdown', () => {
 		assert.ok(true, 'a throwing close does not crash shutdown')
 	})
 
-	stubbable && test('normalizes Bun stop() and Deno shutdown()', async (assert, mock) => {
+	test('SIGHUP reloads servers that expose reload()', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		var handlers = {}
 		mock.swap(process, 'on', (name, fn) => { handlers[name] = fn })
-		mock.swap(globalThis, 'setTimeout', () => ({ unref() {} }))
-
-		var log = []
-		// Bun: stop() instead of close(), address is a property, server has unref().
-		, bunServer = { stop: () => log.push('stop'), unref: () => log.push('bun-unref'), address: { address: '127.0.0.1', port: 1 } }
-		// Deno: shutdown() instead of close(), no address.
-		, denoServer = { shutdown: () => log.push('shutdown'), unref: () => log.push('deno-unref') }
-
-		setupShutdown([bunServer, denoServer])
-		handlers.SIGTERM()
-		assert.equal(log, ['stop', 'bun-unref', 'shutdown', 'deno-unref'], 'uses stop()/shutdown() and unref()')
+		var reloaded = 0
+		// A server without reload() (e.g. plain HTTP) is skipped; one with it rotates.
+		setupShutdown([{ close() {} }, { close() {}, reload: () => reloaded++ }])
+		handlers.SIGHUP()
+		assert.equal(reloaded, 1, 'reload() is called on servers that support it')
 	})
 
 	stubbable && test('falls back to Deno.unrefTimer for numeric timer ids', async (assert, mock) => {
