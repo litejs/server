@@ -10,8 +10,8 @@ describe('Cache', () => {
 	test('string key', async (assert) => {
 		var cache = Cache()
 		cache.put('http://localhost/a', new Response('hello', { status: 201, headers: { 'cache-control': 'max-age=60' } }))
-		var out1 = cache.match('http://localhost/a')
-		, out2 = cache.match('http://localhost/a')
+		var out1 = await cache.match('http://localhost/a')
+		, out2 = await cache.match('http://localhost/a')
 		assert.equal(out1.status, 201, 'preserves status')
 		assert.equal(await out1.text(), 'hello')
 		assert.equal(await out2.text(), 'hello', 'each match is independently readable')
@@ -24,7 +24,7 @@ describe('Cache', () => {
 		var cache = Cache()
 		var req = new Request('http://localhost/g')
 		cache.put(req, new Response('req-key', { headers: { 'cache-control': 'max-age=60' } }))
-		assert.equal(await cache.match(req).text(), 'req-key')
+		assert.equal(await (await cache.match(req)).text(), 'req-key')
 		assert.ok(cache.delete(req), 'deletes by Request object')
 		assert.equal(cache.match(req), undefined, 'entry is gone after delete')
 	})
@@ -33,7 +33,7 @@ describe('Cache', () => {
 		var cache = Cache()
 		, mk = enc => new Request('http://localhost/v', { headers: { 'accept-encoding': enc } })
 		cache.put(mk('gzip'), new Response('gz', { headers: { vary: 'accept-encoding', 'cache-control': 'max-age=60' } }))
-		assert.equal(await cache.match(mk('gzip')).text(), 'gz', 'same Accept-Encoding hits')
+		assert.equal(await (await cache.match(mk('gzip'))).text(), 'gz', 'same Accept-Encoding hits')
 		assert.equal(cache.match(mk('br')), undefined, 'different Accept-Encoding misses')
 		assert.equal(cache.match('http://localhost/v'), undefined, 'a header-less (string) request misses')
 		cache.put('http://localhost/star', new Response('x', { headers: { vary: '*', 'cache-control': 'max-age=60' } }))
@@ -58,18 +58,28 @@ describe('Cache', () => {
 		var cache = Cache()
 		// No freshness headers → default 60s, still fresh.
 		cache.put('http://localhost/d', new Response('default'))
-		assert.equal(await cache.match('http://localhost/d').text(), 'default')
+		assert.equal(await (await cache.match('http://localhost/d')).text(), 'default')
 		// max-age=0 → already expired.
 		cache.put('http://localhost/f', new Response('old', { headers: { 'cache-control': 'max-age=0' } }))
 		assert.equal(cache.match('http://localhost/f'), undefined, 'max-age=0 is expired')
 		// s-maxage wins over max-age=0.
 		cache.put('http://localhost/s', new Response('shared', { headers: { 'cache-control': 'max-age=0, s-maxage=60' } }))
-		assert.equal(await cache.match('http://localhost/s').text(), 'shared', 's-maxage takes precedence')
+		assert.equal(await (await cache.match('http://localhost/s')).text(), 'shared', 's-maxage takes precedence')
 		// Expires: future fresh, past expired.
 		cache.put('http://localhost/x', new Response('exp', { headers: { expires: new Date(Date.now() + 60000).toUTCString() } }))
-		assert.equal(await cache.match('http://localhost/x').text(), 'exp', 'future Expires is fresh')
+		assert.equal(await (await cache.match('http://localhost/x')).text(), 'exp', 'future Expires is fresh')
 		cache.put('http://localhost/p', new Response('past', { headers: { expires: new Date(Date.now() - 1000).toUTCString() } }))
 		assert.equal(cache.match('http://localhost/p'), undefined, 'past Expires is expired')
+	})
+
+	test('match honors Range requests', async (assert) => {
+		var cache = Cache()
+		cache.put('http://localhost/r', new Response('0123456789', { headers: { 'content-length': '10', 'cache-control': 'max-age=60' } }))
+		var res = await cache.match(new Request('http://localhost/r', { headers: { range: 'bytes=2-4' } }))
+		assert.equal(res.status, 206)
+		assert.equal(await res.text(), '234')
+		assert.equal(res.headers.get('content-range'), 'bytes 2-4/10')
+		assert.equal(await (await cache.match('http://localhost/r')).text(), '0123456789', 'a string key still serves the full body')
 	})
 })
 
