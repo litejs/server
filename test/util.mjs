@@ -2,7 +2,7 @@
 import '@litejs/cli/test.js'
 import {
 	b64Arr, b64Dec, b64Enc, b64Url,
-	fail, hasOwn, hex,
+	fail, hasOwn, header, hex,
 	isArr, isFn, isNum, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,
@@ -40,6 +40,18 @@ describe('util.mjs', () => {
 		[{}, 'a', false],
 		[{a:null}, 'a', true],
 	], (obj, key, expected, assert) => assert.equal(hasOwn(obj, key), expected).end())
+
+	test('header', (assert) => {
+		var req = new Request('http://localhost/', { headers: { range: 'bytes=0-1' } })
+		, res = new Response('', { headers: { 'Content-Type': 'text/plain' } })
+		assert.equal(header(req, 'range'), 'bytes=0-1')
+		assert.equal(header(res, 'content-type'), 'text/plain')
+		assert.equal(header(res, 'Content-Type'), 'text/plain', 'case-insensitive')
+		assert.equal(header(res, 'x-missing'), '', 'missing header')
+		assert.equal(header(null, 'range'), '', 'no request')
+		assert.equal(header({}, 'range'), '', 'no headers')
+		assert.end()
+	})
 
 	test('hex {0}', [
 		[ '00010f10ff', [0, 1, 15, 16, 255] ],

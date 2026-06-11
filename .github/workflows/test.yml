@@ -58,6 +58,9 @@ jobs:
       env:
         CI: "1"
         WRANGLER_SEND_METRICS: "false"
+        PORT: "8081"
+        S3_AWS_ID: ${{ secrets.S3_AWS_ID }}
+        S3_AWS_SECRET: ${{ secrets.S3_AWS_SECRET }}
   Release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [Bun, Deno, Coverage, E2E, Test]

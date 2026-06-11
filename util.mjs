@@ -17,6 +17,7 @@ var UNDEF
 , b64Url = buf => b64Enc(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 , fail = msg => { throw Error(msg) }
 , hasOwn = Object.hasOwn
+, header = (req, name) => req?.headers?.get(name) || ''
 , hex = val => Array.from(toUint(val), c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 , isArr = Array.isArray
 , isFn = fn => typeof fn === 'function'
@@ -48,7 +49,7 @@ var UNDEF
 export {
 	UNDEF,
 	b64Arr, b64Dec, b64Enc, b64Url,
-	fail, hasOwn, hex,
+	fail, hasOwn, header, hex,
 	isArr, isFn, isNum, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,

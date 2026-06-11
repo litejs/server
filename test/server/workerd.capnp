@@ -6,6 +6,7 @@ const config :Workerd.Config = (
 	services = [
 		(name = "main", worker = .mainWorker),
 		(name = "kv", worker = .kvWorker),
+		(name = "r2", worker = .r2Worker),
 		(name = "assets", disk = (path = "public")),
 		(name = "do-storage", disk = (path = "build/do", writable = true)),
 	],
@@ -19,12 +20,20 @@ const mainWorker :Workerd.Worker = (
 	durableObjectStorage = (localDisk = "do-storage"),
 	bindings = [
 		(name = "KV", kvNamespace = "kv"),
+		(name = "R2", r2Bucket = "r2"),
 		(name = "COUNTER", durableObjectNamespace = "Counter"),
 		(name = "ASSETS", service = "assets"),
+		(name = "S3_AWS_ID", fromEnvironment = "S3_AWS_ID"),
+		(name = "S3_AWS_SECRET", fromEnvironment = "S3_AWS_SECRET"),
 	],
 );
 
 const kvWorker :Workerd.Worker = (
 	modules = [(name = "kv", esModule = embed "workerd-kv.mjs")],
+	compatibilityDate = "2025-09-27",
+);
+
+const r2Worker :Workerd.Worker = (
+	modules = [(name = "r2", esModule = embed "workerd-r2.mjs")],
 	compatibilityDate = "2025-09-27",
 );
