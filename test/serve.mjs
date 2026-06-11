@@ -1,6 +1,6 @@
 
 import '@litejs/cli/test.js'
-import { serveStatic } from '../lib/static.mjs'
+import { serveRange, serveStatic } from '../lib/serve.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promises as fs } from 'node:fs'
@@ -106,6 +106,52 @@ describe('serveStatic', () => {
 	test('cleanup', async (assert) => {
 		await fs.rm(testDir, { recursive: true, force: true })
 		assert.ok(true)
+	})
+})
+
+describe('serveRange', () => {
+	var body = '0123456789'
+	, full = () => new Response(body, { headers: { 'content-length': '10', 'content-type': 'text/plain' } })
+	, get = headers => new Request('http://localhost/f', { headers })
+
+	it('serves {0} as bytes {1}', [
+		['bytes=0-3', '0-3/10', '0123'],
+		['bytes=4-', '4-9/10', '456789'],
+		['bytes=-3', '7-9/10', '789'],
+		['bytes=0-0', '0-0/10', '0'],
+	], async (range, contentRange, expected, assert) => {
+		var res = await serveRange(get({ range }), full())
+		assert.equal(res.status, 206)
+		assert.equal(await res.text(), expected)
+		assert.equal(res.headers.get('content-range'), 'bytes ' + contentRange)
+		assert.equal(res.headers.get('content-length'), '' + expected.length)
+		assert.equal(res.headers.get('content-type'), 'text/plain', 'other headers are kept')
+	})
+
+	it('serves the full body for {1}', [
+		[{}, 'no Range header'],
+		[{ range: 'bytes=4-2' }, 'a backwards range'],
+		[{ range: 'bytes=10-' }, 'an unsatisfiable range'],
+		[{ range: 'bytes=0-99' }, 'an over-long range'],
+		[{ range: 'bytes=-99' }, 'an over-long suffix'],
+		[{ range: 'bytes=-' }, 'an empty range'],
+		[{ range: 'bytes=0-1,3-4' }, 'multiple ranges'],
+		[{ range: 'items=0-1' }, 'unknown units'],
+		[{ range: 'bytes=0-3', 'if-range': '"v1"' }, 'If-Range (validators are not tracked)'],
+	], async (headers, name, assert) => {
+		var res = full()
+		assert.strictEqual(await serveRange(get(headers), res), res, 'response passes through untouched')
+	})
+
+	test('passes through when status or length disqualify', async (assert) => {
+		var missing = new Response(null, { status: 404 })
+		assert.strictEqual(await serveRange(get({ range: 'bytes=0-1' }), Promise.resolve(missing)), missing, 'non-200 and promised responses')
+		// An upstream (R2, assets, a nested serveRange) may have honored Range already.
+		var partial = new Response('23', { status: 206, headers: { 'content-length': '2', 'content-range': 'bytes 2-3/10' } })
+		assert.strictEqual(await serveRange(get({ range: 'bytes=2-3' }), partial), partial, 'an already-ranged 206 is not sliced again')
+		var unsized = new Response(body, { headers: { 'content-type': 'text/plain' } })
+		unsized.headers.delete('content-length')
+		assert.strictEqual(await serveRange(get({ range: 'bytes=0-1' }), unsized), unsized, 'unknown content-length')
 	})
 })
 
