@@ -602,7 +602,7 @@ describe('DO', () => {
 		}, 2)
 	})
 
-	test('alarm re-instantiates evicted DO', (assert) => {
+	test('alarm runs against instance storage', (assert) => {
 		class WithAlarm extends DurableObject {
 			static schema = ['CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)']
 			constructor(ctx, env) {
@@ -713,30 +713,27 @@ describe('DO', () => {
 		assert.end()
 	})
 
-	test('evict closes idle instances and keeps fresh ones', (assert) => {
+	test('evict closes instances not got since last sweep, keeps fresh ones', (assert) => {
 		var closed = []
 		var instances = new Map()
-		instances.set('idle',  { db: { close: () => closed.push('idle')  }, instance: { active:false } })
-		instances.set('fresh', { db: { close: () => closed.push('fresh') }, instance: { active: true } })
+		instances.set('idle',  { db: { close: () => closed.push('idle')  }, active: false })
+		instances.set('fresh', { db: { close: () => closed.push('fresh') }, active: true })
 		evict(instances)
 		assert.equal(closed, ['idle'])
 		assert.equal(instances.has('idle'),  false)
 		assert.equal(instances.has('fresh'), true)
+		assert.equal(instances.get('fresh').active, false, 'first probe arms eviction for next sweep')
 		assert.end()
 	})
 
-	test('method wrapper marks active and normalizes fetch input to Request', (assert) => {
+	test('fetch wrapper normalizes input to Request', (assert) => {
 		class MyCls extends DurableObject {
 			greet() { return 'hi' }
 			fetch(req) { return req.url }
 		}
 		var stub = makeNS(MyCls, { KEY: 'val' }).getByName('a')
 		assert.strictEqual(stub.env.KEY, 'val')
-
-		// plain methods run and flag the instance active
-		stub.active = false
 		assert.equal(stub.greet(), 'hi')
-		assert.equal(stub.active, true)
 
 		// fetch wraps a string/URL into a Request
 		assert.equal(stub.fetch('https://example.com/path'), 'https://example.com/path')
