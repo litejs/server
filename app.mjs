@@ -4,25 +4,6 @@ import { isFn } from './util.mjs'
 
 var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 , routeEsc = s => s.replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
-, routeRun = async (req, env, match, routes) => {
-	req.param = {}
-	// Handlers and middleware throw on error; the worker owns error -> response.
-	for (var end, m, body, pos = 0, len = routes.length; pos < len; pos = end) {
-		end = routes[pos + 1]
-		if ((m = routes[pos++]) < 1) {
-			// Middleware: [0, end, ...fns]
-			for (; !body && ++pos < end; ) if ((body = await routes[pos](req, env))) end = len
-		} else if (match[m] != null) {
-			// Matched route: [group, end, routeStr, ...paramNames, handler]
-			req.route = routes[++pos]
-			for (end--; ++pos < end; ) req.param[routes[pos]] = decodeURIComponent(match[++m])
-			m = routes[pos]
-			body = isFn(m) ? await m(req, env) : m
-			end = len
-		}
-	}
-	return body && (body.body || body.status) ? body : { body }
-}
 , App = opts => {
 	var methods = { DELETE: 'del', GET: 'get', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, keys = Object.keys(methods)
@@ -64,9 +45,26 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 		use(...fns) {
 			routes.push(0, 2 + routes.length + fns.length, ...fns)
 		},
-		handle(req, env) {
+		async handle(req, env) {
 			var match = req && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
-			return match ? routeRun(req, env, match, routes) : notFound(req, env)
+			if (!match) return notFound(req, env)
+			req.param = {}
+			// Handlers and middleware throw on error; the worker owns error -> response.
+			for (var end, m, body, pos = 0, len = routes.length; pos < len; pos = end) {
+				end = routes[pos + 1]
+				if ((m = routes[pos++]) < 1) {
+					// Middleware: [0, end, ...fns]
+					for (; !body && ++pos < end; ) if ((body = await routes[pos](req, env))) end = len
+				} else if (match[m] != null) {
+					// Matched route: [group, end, routeStr, ...paramNames, handler]
+					req.route = routes[++pos]
+					for (end--; ++pos < end; ) req.param[routes[pos]] = decodeURIComponent(match[++m])
+					m = routes[pos]
+					body = isFn(m) ? await m(req, env) : m
+					end = len
+				}
+			}
+			return body && (body.body || body.status) ? body : { body }
 		}
 	}
 }
