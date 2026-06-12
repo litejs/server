@@ -67,11 +67,19 @@ describe('worker adapter', () => {
 		assert.equal(await res.text(), 'default,override')
 	})
 
-	test('a thrown error maps to 400 with the error message', async (assert) => {
+	test('a thrown error maps to a generic, logged 500', async (assert, mock) => {
+		mock.swap(console, 'error', mock.fn())
 		var res = await send(() => { throw new Error('nope') }, '/')
-		assert.equal(res.status, 400)
-		assert.equal(await res.text(), '{"error":"nope"}')
+		assert.equal(res.status, 500)
+		assert.equal(await res.text(), '{"error":"Internal Server Error"}', 'internal message is not leaked')
 		assert.equal(res.headers.get('content-type'), 'application/json')
+		assert.equal(console.error.called, 1, 'error is logged server-side')
+	})
+
+	test('a thrown error with a code maps to that status and exposes its message', async (assert) => {
+		var res = await send(() => { var e = new Error('gone'); e.code = 410; throw e }, '/')
+		assert.equal(res.status, 410)
+		assert.equal(await res.text(), '{"error":"gone"}', 'an intentional 4xx exposes its message')
 	})
 
 	test('a 5xx error body is generic and logged server-side', async (assert, mock) => {
@@ -91,9 +99,10 @@ describe('worker adapter', () => {
 		assert.equal(await res.text(), '{"error":"Internal Server Error"}')
 		assert.equal(console.error.calls[0].args[0], err, 'the error itself is logged when stack is empty')
 
+		err.code = 422
 		res = await send(() => { throw err }, '/')
-		assert.equal(res.status, 400)
-		assert.equal(await res.text(), '{"error":{}}', 'a messageless 4xx error serializes the error itself')
+		assert.equal(res.status, 422)
+		assert.equal(await res.text(), '{"error":{"code":422}}', 'a messageless 4xx error serializes the error itself')
 	})
 
 	test('req.resHeaders and handler headers merge, set-cookie appends', async (assert) => {

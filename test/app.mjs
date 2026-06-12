@@ -279,17 +279,17 @@ describe('router', () => {
 		assert.equal(called[2], 'handler')
 	})
 
-	test('errors map to status', [
-		[r => r.add('e', () => { throw new Error('sync') }), 500],
-		[r => r.add('e', async () => { throw new Error('async') }), 500],
-		[r => { r.use(async () => { throw new Error('mw') }); r.add('e', () => 'ok') }, 500],
+	test('errors propagate to the caller; the worker maps them', [
+		[r => r.add('e', () => { throw new Error('sync') }), undefined],
+		[r => r.add('e', async () => { throw new Error('async') }), undefined],
+		[r => { r.use(async () => { throw new Error('mw') }); r.add('e', () => 'ok') }, undefined],
 		[r => r.add('e', () => { var er = new Error('gone'); er.code = 410; throw er }), 410],
-	], async (setup, expectedStatus, assert) => {
+	], async (setup, expectedCode, assert) => {
 		var r2 = Router()
 		setup(r2)
-		var result = await r2.handle(createReq('e'))
-		assert.equal(result.status, expectedStatus)
-		assert.ok(result.body instanceof Error)
+		var err = await r2.handle(createReq('e')).then(() => null, e => e)
+		assert.ok(err instanceof Error, 'router rethrows instead of swallowing')
+		assert.equal(err.code, expectedCode, 'e.code is preserved for the worker to map')
 	})
 
 	test('falsy or pathless request returns 404', [null, {}], async (req, assert) => {
