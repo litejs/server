@@ -17,7 +17,7 @@ const env = loadEnv(existsSync('.env.json') && '.env.json', {
 	KV: KV(db, 'kv'),
 	R2: R2(db, 'r2'),
 })
-env.COUNTER = durableObject(Counter, doDir, env, DB)
+env.COUNTER = durableObject(Counter, doDir, env)
 // Real S3 client, wired only when credentials are present (CI secrets or .env.json).
 if (env.S3_AWS_ID && env.S3_AWS_SECRET) env.S3 = S3({
 	region: 'eu-north-1',

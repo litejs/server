@@ -424,7 +424,7 @@ describe('DO', () => {
 	, ns = makeNS(MyDO, env)
 
 	function makeNS(Cls, env) {
-		return durableObject(Cls, mkdtempSync(join(rootDir, 'ns-')), env || {}, DB)
+		return durableObject(Cls, mkdtempSync(join(rootDir, 'ns-')), env || {})
 	}
 
 	test('id construction: idFromName, newUniqueId, idFromString, equals', (assert) => {
@@ -508,7 +508,7 @@ describe('DO', () => {
 			}
 			WithSchema.schema = schema
 			Object.defineProperty(WithSchema, 'name', { value: 'WithSchema' })
-			var stub = durableObject(WithSchema, rootD, {}, DB).getByName('a')
+			var stub = durableObject(WithSchema, rootD, {}).getByName('a')
 			version = stub.ctx.storage.sql.exec('SELECT COALESCE(MAX(id),0) AS v FROM _migrations').one().v
 		}
 		assert.equal(version, expectedVersion)
@@ -624,12 +624,12 @@ describe('DO', () => {
 		}
 		var dir = mkdtempSync(join(rootDir, 'ns-'))
 		// Compute the key the way idFromName would
-		var ns0 = durableObject(WithAlarm, dir, {}, DB)
+		var ns0 = durableObject(WithAlarm, dir, {})
 		var key = ns0.idFromName('a').toString()
 
 		// Pre-populate the alarms map and pass it to a fresh namespace
 		var alarms = new Map([[key, { time: Date.now() + 2 }]])
-		durableObject(WithAlarm, dir, {}, DB, alarms)
+		durableObject(WithAlarm, dir, {}, alarms)
 		// The pre-populated entry should now have a timer scheduled
 		assert.ok("timer" in alarms.get(key), 'timer field set (may be undefined in some runtimes via unref?.())')
 		// Wait for fire
