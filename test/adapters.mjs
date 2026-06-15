@@ -46,7 +46,6 @@ describe('node adapter', !skip && (() => {
 		try {
 			var get = await untilReady(() => fetch(base + '/hi'))
 			assert.equal(get.status, 200)
-			assert.equal(get.headers.get('content-type'), 'text/plain')
 			assert.equal(await get.text(), 'world')
 
 			var post = await fetch(base + '/echo', {

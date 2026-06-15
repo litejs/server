@@ -20,29 +20,30 @@ describe('app', () => {
 		var app = App()
 		app[alias]('test', () => method + ' response')
 		var result = await app(createReq('/test', method))
-		assert.equal(result.body, method + ' response')
+		assert.equal(result, method + ' response')
 	})
 
 	test('all() registers handler for every method', async (assert) => {
 		var app = App()
 		app.all('ping', () => 'pong')
 		for (var method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
-			assert.equal((await app(createReq('/ping', method))).body, 'pong', method + ' hits all() handler')
+			assert.equal(await app(createReq('/ping', method)), 'pong', method + ' hits all() handler')
 		}
 	})
 
 	test('method not allowed - 405', async (assert) => {
 		var app = App()
-		var result = await app(createReq('/test', 'CONNECT'))
-		assert.equal(result.status, 405)
-		assert.equal(result.headers.Allow, 'DELETE, GET, PATCH, POST, PUT')
+		var req = createReq('/test', 'CONNECT')
+		var result = await app(req)
+		assert.equal(result, 405)
+		assert.equal(req.resHeaders.Allow, 'DELETE, GET, PATCH, POST, PUT')
 	})
 
 	test('HEAD is routed to the GET handler', async (assert) => {
 		var app = App()
 		app.get('test', () => 'GET response')
 		var result = await app(createReq('/test', 'HEAD'))
-		assert.equal(result.body, 'GET response')
+		assert.equal(result, 'GET response')
 	})
 
 	test('middleware and route parameters', async (assert) => {
@@ -62,7 +63,7 @@ describe('app', () => {
 			return { userId: req.param.userId }
 		})
 		var result = await app(createReq('/user/123', 'GET'))
-		assert.equal(result.body.userId, '123')
+		assert.equal(result.userId, '123')
 		assert.equal(called.length, 3)
 		assert.equal(called[0], 'middleware1')
 		assert.equal(called[1], 'middleware2')
@@ -77,14 +78,14 @@ describe('app', () => {
 		})
 		app.options('test', () => 'options')
 		var result = await app(createReq('/test', 'OPTIONS'))
-		assert.equal(result.body, 'options')
+		assert.equal(result, 'options')
 	})
 
 	test('missing route returns 404', async (assert) => {
 		var app = App()
 		app.get('known', () => 'ok')
 		var result = await app(createReq('/missing', 'GET'))
-		assert.equal(result.status, 404)
+		assert.equal(result, 404)
 	})
 
 	test('env forwarded to handlers', [
@@ -94,8 +95,8 @@ describe('app', () => {
 		var app = App()
 		app.get('env', (req, env) => ({ defined: env !== undefined, R2: env?.R2 && true }))
 		var result = await app(createReq('/env', 'GET'), env)
-		assert.equal(result.body.defined, expected.defined)
-		assert.equal(result.body.R2, expected.R2)
+		assert.equal(result.defined, expected.defined)
+		assert.equal(result.R2, expected.R2)
 	})
 
 	test('mount sub-app', async (assert) => {
@@ -111,25 +112,25 @@ describe('app', () => {
 		app.get('hih', 'app hih')
 
 		var result = await app(createReq('/', 'GET'))
-		assert.equal(result.body, 'home')
+		assert.equal(result, 'home')
 
 		result = await app(createReq('/hi', 'GET'))
-		assert.equal(result.body, 'sub root')
+		assert.equal(result, 'sub root')
 
 		result = await app(createReq('/hi/123', 'GET'))
-		assert.equal(result.body, 'item 123')
+		assert.equal(result, 'item 123')
 
 		result = await app(createReq('/hi/456', 'PUT'))
-		assert.equal(result.body, 'updated 456')
+		assert.equal(result, 'updated 456')
 
 		result = await app(createReq('/hi/unknown', 'GET'))
-		assert.equal(result.status, 404)
+		assert.equal(result, 404)
 
 		result = await app(createReq('/hih', 'GET'))
-		assert.equal(result.body, 'app hih')
+		assert.equal(result, 'app hih')
 
 		result = await app(createReq('/hi/path/42', 'GET'))
-		assert.equal(result.body, '/path/42', 'req.path inside sub is prefix-stripped')
+		assert.equal(result, '/path/42', 'req.path inside sub is prefix-stripped')
 	})
 
 	test('req.route reflects deepest matched pattern through mounts', async (assert) => {
@@ -140,8 +141,8 @@ describe('app', () => {
 		app.get('home', (req) => req.route)
 		app.mount('api', inner)
 
-		assert.equal((await app(createReq('/home', 'GET'))).body, 'home', 'top-level route pattern')
-		assert.equal((await app(createReq('/api/info/42', 'GET'))).body, 'info/{id+}', 'inner route pattern, not mount prefix')
+		assert.equal(await app(createReq('/home', 'GET')), 'home', 'top-level route pattern')
+		assert.equal(await app(createReq('/api/info/42', 'GET')), 'info/{id+}', 'inner route pattern, not mount prefix')
 	})
 
 	test('sub-app middleware scoped to mount prefix only', async (assert) => {
@@ -154,11 +155,11 @@ describe('app', () => {
 		app.get('', () => 'root')
 		app.mount('sub', sub)
 
-		assert.equal((await app(createReq('/', 'GET'))).body, 'root', 'parent root unaffected')
-		assert.equal((await app(createReq('/sub/hi', 'GET'))).body, 'rel')
+		assert.equal(await app(createReq('/', 'GET')), 'root', 'parent root unaffected')
+		assert.equal(await app(createReq('/sub/hi', 'GET')), 'rel')
 		assert.equal(mwHits, 1, 'middleware ran for /sub/hi')
-		assert.equal((await app(createReq('/sub/nope', 'GET'))).status, 404, 'no leak to nonexistent sub paths')
-		assert.equal((await app(createReq('/elsewhere', 'GET'))).status, 404, 'no leak outside prefix')
+		assert.equal(await app(createReq('/sub/nope', 'GET')), 404, 'no leak to nonexistent sub paths')
+		assert.equal(await app(createReq('/elsewhere', 'GET')), 404, 'no leak outside prefix')
 		assert.equal(mwHits, 1, 'middleware does not run for paths the sub-app 404s on')
 	})
 
@@ -174,10 +175,10 @@ describe('app', () => {
 		var app = App()
 		app.mount('api', mid)
 
-		assert.equal((await app(createReq('/api', 'GET'))).body, 'mid root')
-		assert.equal((await app(createReq('/api/hi', 'GET'))).body, 'inner root')
-		assert.equal((await app(createReq('/api/hi/info', 'GET'))).body, 'inner info')
-		assert.equal((await app(createReq('/hi/info', 'GET'))).status, 404, 'nested mount NOT reachable at top-level root')
+		assert.equal(await app(createReq('/api', 'GET')), 'mid root')
+		assert.equal(await app(createReq('/api/hi', 'GET')), 'inner root')
+		assert.equal(await app(createReq('/api/hi/info', 'GET')), 'inner info')
+		assert.equal(await app(createReq('/hi/info', 'GET')), 404, 'nested mount NOT reachable at top-level root')
 	})
 
 })
@@ -236,26 +237,24 @@ describe('router', () => {
 
 	], async (url, expectedIndex, expectedParam, assert) => {
 		var result = await r.handle(createReq(url))
-		var actualIndex = result.body?.index ?? -1
-		var actualParam = result.body?.param ?? {}
+		var actualIndex = result?.index ?? -1
+		var actualParam = result?.param ?? {}
 		assert
 		.equal(actualIndex, expectedIndex)
 		.equal(actualParam, expectedParam)
 	})
 
-	test('handler return shapes', [
-		[() => 'sync', 'sync', undefined],
-		[async () => 'async', 'async', undefined],
-		['literal-value', 'literal-value', undefined],
-		[() => ({ a: 1 }), { a: 1 }, undefined], // object without body/status is wrapped
-		[() => [1, 2], [1, 2], undefined],
-		[() => ({ body: 'created', status: 201 }), 'created', 201],
-	], async (handler, expectedBody, expectedStatus, assert) => {
+	test('handler result is returned verbatim; the worker shapes it', [
+		[() => 'sync', 'sync'],
+		[async () => 'async', 'async'],
+		['literal-value', 'literal-value'],
+		[() => ({ a: 1 }), { a: 1 }],
+		[() => [1, 2], [1, 2]],
+		[() => ({ body: 'created', status: 201 }), { body: 'created', status: 201 }],
+	], async (handler, expected, assert) => {
 		var r2 = Router()
 		r2.add('test', handler)
-		var result = await r2.handle(createReq('test'))
-		assert.equal(result.body, expectedBody)
-		if (expectedStatus !== undefined) assert.equal(result.status, expectedStatus)
+		assert.equal(await r2.handle(createReq('test')), expected)
 	})
 
 	test('middleware with sync and async', async (assert) => {
@@ -272,7 +271,7 @@ describe('router', () => {
 			return 'ok'
 		})
 		var result = await r2.handle(createReq('test'))
-		assert.equal(result.body, 'ok')
+		assert.equal(result, 'ok')
 		assert.equal(called.length, 3)
 		assert.equal(called[0], 'middleware1')
 		assert.equal(called[1], 'middleware2')
@@ -295,27 +294,27 @@ describe('router', () => {
 	test('falsy or pathless request returns 404', [null, {}], async (req, assert) => {
 		var r2 = Router()
 		r2.add('test', () => 'found')
-		assert.equal((await r2.handle(req)).status, 404)
+		assert.equal(await r2.handle(req), 404)
 	})
 
-	test('middleware only returns undefined body', async (assert) => {
+	test('middleware that returns nothing yields an undefined result', async (assert) => {
 		var r2 = Router()
 		var called = false
 		r2.use(() => { called = true })
 		var result = await r2.handle({ path: '/' })
 		assert.equal(called, true)
-		assert.equal(result.body, undefined)
+		assert.equal(result, undefined)
 	})
 
-	test('middleware short-circuits when returning a body', async (assert) => {
+	test('middleware short-circuits when returning a value', async (assert) => {
 		var r2 = Router()
 		var called = []
-		r2.use(() => { called.push('a'); return { body: 'stop', status: 418 } })
+		r2.use(() => { called.push('a'); return { error: 'denied' } })
 		r2.use(() => { called.push('b') })
 		r2.add('test', () => { called.push('handler'); return 'ok' })
 		var result = await r2.handle({ path: '/test' })
 		assert.equal(called, ['a'])
-		assert.equal(result, { body: 'stop', status: 418 })
+		assert.equal(result, { error: 'denied' })
 	})
 
 	test('notFound option', async (assert) => {

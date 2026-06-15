@@ -29,11 +29,11 @@ app.use((req, env) => {
 })
 
 // Only single, first matching route get executed!
-app.get('hello/world', (res, env) => 'Hello MOON!')
-app.get('hello/{name}', (res, env) => 'Hello ' + req.param.name)
-app.get('bye/{name}', (res, env) => 'Bye ' + req.param.name)
-app.get('bye/moon', (res, env) => { /* Never executed as previous handler matches */ })
-app.get('teapot', () => ({ body: "no coffee", status: 418 }))
+app.get('hello/world', (req, env) => 'Hello MOON!')
+app.get('hello/{name}', (req, env) => 'Hello ' + req.param.name)
+app.get('bye/{name}', (req, env) => 'Bye ' + req.param.name)
+app.get('bye/moon', (req, env) => { /* Never executed as previous handler matches */ })
+app.get('teapot', (req) => (req.resStatus = 418, "no coffee"))
 app.get('notFound', () => 404) // Return a number to send status code
 
 // Group routes and mount under a prefix
@@ -53,12 +53,13 @@ export default app
 ```
 
 Handlers receive `(req, env)` and may return
-a string (sent as `text/plain`),
+a native `Response`,
 a number (status only),
-an object (serialized to JSON),
-a `{ body, status, headers }` object,
-or a native `Response`.
-Thrown errors map to `err.code || 500`.
+an object or array (serialized to JSON),
+or a body passed to new `Response`.
+
+Set the status with `req.resStatus = 409`, extra headers with `req.resHeaders.allow = 'GET, PUT'`.
+Thrown errors map to `err.code || 500`; 5xx bodies are kept generic.
 
 Requests include `param`, `path`, `fullPath`, `query`, `searchParams`, and `header(name)`.
 

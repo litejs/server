@@ -7,9 +7,9 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 , App = opts => {
 	var methods = { DELETE: 'del', GET: 'get', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, keys = Object.keys(methods)
+	, notAllowed = opts?.notAllowed || (req => ((req.resHeaders ??= {}).Allow = keys.join(', '), 405))
 	, app = (req, env) => (routers[req.method === 'HEAD' ? 'GET' : req.method]?.handle || notAllowed)(req, env)
 	, each = fn => (keys.forEach(method => fn(routers[method], method)), app)
-	, notAllowed = opts?.notAllowed || (() => ({ status: 405, headers: { Allow: keys.join(', ') }}))
 	, routers = app.routers = Object.create(null)
 
 	each((_, method) => app[methods[method]] = (routers[method] = Router(opts)).add)
@@ -28,7 +28,6 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	var re
 	, reStr = ''
 	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+\\/)*)', ...opts?.extensions }
-	, notFound = opts?.notFound || (() => ({ status: 404 }))
 	, groups = 1
 	, routes = []
 
@@ -47,24 +46,23 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 		},
 		async handle(req, env) {
 			var match = req && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
-			if (!match) return notFound(req, env)
-			req.param = {}
+			if (!match) return opts?.notFound?.(req, env) ?? 404
 			// Handlers and middleware throw on error; the worker owns error -> response.
-			for (var end, m, body, pos = 0, len = routes.length; pos < len; pos = end) {
+			for (var end, m, res, pos = 0, len = routes.length, param = req.param ??= {}; pos < len; pos = end) {
 				end = routes[pos + 1]
 				if ((m = routes[pos++]) < 1) {
 					// Middleware: [0, end, ...fns]
-					for (; !body && ++pos < end; ) if ((body = await routes[pos](req, env))) end = len
+					for (; !res && ++pos < end; ) if ((res = await routes[pos](req, env))) end = len
 				} else if (match[m] != null) {
 					// Matched route: [group, end, routeStr, ...paramNames, handler]
 					req.route = routes[++pos]
-					for (end--; ++pos < end; ) req.param[routes[pos]] = decodeURIComponent(match[++m])
+					for (end--; ++pos < end; ) param[routes[pos]] = decodeURIComponent(match[++m])
 					m = routes[pos]
-					body = isFn(m) ? await m(req, env) : m
+					res = isFn(m) ? await m(req, env) : m
 					end = len
 				}
 			}
-			return body && (body.body || body.status) ? body : { body }
+			return res
 		}
 	}
 }

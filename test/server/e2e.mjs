@@ -41,17 +41,33 @@ describe('e2e {0} ' + base, [
 	describe(name, command(cmd) && (() => {
 		var child
 		test('start', async assert => {
-			assert.setTimeout(bootTime)
-			child = spawn('npm', ['run', '--silent', script], { cwd, detached: true })
-			var errors = ''
-			child.stderr.on('data', d => errors += d)
+			// TODO: if an unrelated HTTP server is already on `port`, this passes
+			// against it (we only check for a response, not that it's our child).
+			// Headroom over the poll deadline so the framework timeout never races
+			// the throw below into a confusing "ended multiple times".
+			assert.setTimeout(bootTime + 2000)
+			// node/bun/deno read PORT from env; workerd/wrangler ignore it and use
+			// their own config. Pass it so every runtime binds the port we probe.
+			child = spawn('npm', ['run', '--silent', script], {
+				cwd, detached: true,
+				env: { ...process.env, PORT: '' + port },
+			})
+			var output = ''
+			child.stdout.on('data', d => output += d)
+			child.stderr.on('data', d => output += d)
+			child.on('error', err => output += '\nspawn error: ' + err)
 			var deadline = Date.now() + bootTime
 			// Stop polling as soon as the launcher exits, so a failed build or a
-			// missing binary surfaces its stderr instead of a bare timeout.
+			// missing binary surfaces its output instead of a bare timeout.
 			while (Date.now() < deadline && child.exitCode === null) {
 				try { return await get('/') } catch { await sleep(100) }
 			}
-			throw new Error('server did not respond\n' + errors)
+			// Let the child's dying stdout/stderr flush before we report it.
+			await sleep(100)
+			throw new Error(
+				(child.exitCode === null ? 'server did not respond' : 'server exited with code ' + child.exitCode)
+				+ '\n' + output
+			)
 		})
 		test('GET /', async assert => {
 			// Static file: serveStatic (node/bun/deno) or the assets binding (cloudflare).
