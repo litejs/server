@@ -155,6 +155,7 @@ describe('{0} adapter', !skip && [
 
 		var app = App()
 		app.get('x', () => name)
+		app.get('defer', (req, env, ctx) => (ctx.waitUntil(Promise.resolve()), name))
 		var env = loadEnv(null, { HOSTNAME: 'test.litejs.com', PORT: 1234 })
 		, server = lib.listen(app, env)
 
@@ -165,6 +166,9 @@ describe('{0} adapter', !skip && [
 
 		var res = await calls[0].fetch(new Request('http://localhost/x'))
 		assert.equal(await res.text(), name, 'serve handler routes through the app')
+
+		var deferred = await calls[0].fetch(new Request('http://localhost/defer'))
+		assert.equal(await deferred.text(), name, 'ctx.waitUntil is wired (no-op off Workers)')
 
 		server.close()
 		assert.equal(stop.called, 1, 'close() stops the single listener')
