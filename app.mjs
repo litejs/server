@@ -8,7 +8,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	var methods = { DELETE: 'del', GET: 'get', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, keys = Object.keys(methods)
 	, notAllowed = opts?.notAllowed || (req => ((req.resHeaders ??= {}).Allow = keys.join(', '), 405))
-	, app = (req, env) => (routers[req.method === 'HEAD' ? 'GET' : req.method]?.handle || notAllowed)(req, env)
+	, app = (req, env, ctx) => (routers[req.method === 'HEAD' ? 'GET' : req.method]?.handle || notAllowed)(req, env, ctx)
 	, each = fn => (keys.forEach(method => fn(routers[method], method)), app)
 	, routers = app.routers = Object.create(null)
 
@@ -17,7 +17,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	app.all = (route, handler, _raw) => each(r => r.add(route, handler, _raw))
 	app.mount = (path, sub) => app.all(
 		path,
-		(req, env) => (req.path = req.path.slice((req.mount = path).length + 1) || '/', sub(req, env)),
+		(req, env, ctx) => (req.path = req.path.slice((req.mount = path).length + 1) || '/', sub(req, env, ctx)),
 		routeEsc(path) + '(?:\\/.*|)'
 	)
 	app.use = (...fns) => each(r => r.use(...fns))
@@ -44,21 +44,21 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 		use(...fns) {
 			routes.push(0, 2 + routes.length + fns.length, ...fns)
 		},
-		async handle(req, env) {
+		async handle(req, env, ctx) {
 			var match = req && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
-			if (!match) return opts?.notFound?.(req, env) ?? 404
+			if (!match) return opts?.notFound?.(req, env, ctx) ?? 404
 			// Handlers and middleware throw on error; the worker owns error -> response.
 			for (var end, m, res, pos = 0, len = routes.length, param = req.param ??= {}; pos < len; pos = end) {
 				end = routes[pos + 1]
 				if ((m = routes[pos++]) < 1) {
 					// Middleware: [0, end, ...fns]
-					for (; !res && ++pos < end; ) if ((res = await routes[pos](req, env))) end = len
+					for (; !res && ++pos < end; ) if ((res = await routes[pos](req, env, ctx))) end = len
 				} else if (match[m] != null) {
 					// Matched route: [group, end, routeStr, ...paramNames, handler]
 					req.route = routes[++pos]
 					for (end--; ++pos < end; ) param[routes[pos]] = decodeURIComponent(match[++m])
 					m = routes[pos]
-					res = isFn(m) ? await m(req, env) : m
+					res = isFn(m) ? await m(req, env, ctx) : m
 					end = len
 				}
 			}

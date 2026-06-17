@@ -38,6 +38,12 @@ describe('worker adapter', () => {
 		assert.equal(res.headers.get('content-type'), 'text/html')
 	})
 
+	test('ctx is forwarded to the handler', async (assert) => {
+		var ctx = { waitUntil() {} }, seen
+		await worker((req, env, c) => (seen = c, 204))(new Request('http://localhost/'), {}, ctx)
+		assert.strictEqual(seen, ctx)
+	})
+
 	test('a returned Response is passed through unchanged', async (assert) => {
 		var res = await send(() => new Response('raw body', { status: 207 }), '/')
 		assert.equal(res.status, 207)

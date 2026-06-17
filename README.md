@@ -52,7 +52,7 @@ app.mount("api", subApp)
 export default app
 ```
 
-Handlers receive `(req, env)` and may return
+Handlers receive `(req, env, ctx)` and may return
 a native `Response`,
 a number (status only),
 an object or array (serialized to JSON),
