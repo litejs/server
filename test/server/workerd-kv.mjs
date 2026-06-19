@@ -1,20 +1,30 @@
 
-// Minimal KV-protocol shim for plain workerd: a kvNamespace binding turns
-// env.KV calls into HTTP requests against this service (get -> GET /key,
-// put -> PUT /key, delete -> DELETE /key, 404 means missing).
-var store = new Map()
+// KV-protocol shim for plain workerd, backed by workerd's internal Durable Object
 
-export default {
+import { DurableObject } from "cloudflare:workers"
+
+export class KvStore extends DurableObject {
+	constructor(ctx, env) {
+		super(ctx, env)
+		this.sql = ctx.storage.sql
+		this.sql.exec('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)')
+	}
 	async fetch(req) {
 		var key = new URL(req.url).pathname
 		switch (req.method) {
 		case 'PUT':
-			store.set(key, await req.text())
+			this.sql.exec('INSERT OR REPLACE INTO kv VALUES (?, ?)', key, await req.text())
 			return new Response()
 		case 'DELETE':
-			return new Response(null, { status: store.delete(key) ? 200 : 404 })
+			return new Response(null, { status: this.sql.exec('DELETE FROM kv WHERE key=?', key).rowsWritten ? 200 : 404 })
 		default:
-			return store.has(key) ? new Response(store.get(key)) : new Response(null, { status: 404 })
+			var row = this.sql.exec('SELECT value FROM kv WHERE key=?', key).toArray()[0]
+			return row ? new Response(row.value) : new Response(null, { status: 404 })
 		}
 	}
 }
+
+export default {
+	fetch: (req, env) => env.KV_DO.getByName('kv').fetch(req)
+}
+

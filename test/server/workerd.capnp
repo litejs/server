@@ -31,9 +31,15 @@ const mainWorker :Workerd.Worker = (
 const kvWorker :Workerd.Worker = (
 	modules = [(name = "kv", esModule = embed "workerd-kv.mjs")],
 	compatibilityDate = "2025-09-27",
+	durableObjectNamespaces = [(className = "KvStore", uniqueKey = "litejs-kv", enableSql = true)],
+	durableObjectStorage = (localDisk = "do-storage"),
+	bindings = [(name = "KV_DO", durableObjectNamespace = "KvStore")],
 );
 
 const r2Worker :Workerd.Worker = (
 	modules = [(name = "r2", esModule = embed "workerd-r2.mjs")],
 	compatibilityDate = "2025-09-27",
+	durableObjectNamespaces = [(className = "R2Store", uniqueKey = "litejs-r2", enableSql = true)],
+	durableObjectStorage = (localDisk = "do-storage"),
+	bindings = [(name = "R2_DO", durableObjectNamespace = "R2Store")],
 );
