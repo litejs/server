@@ -1,6 +1,6 @@
 {
   "name": "@litejs/server",
-  "version": "26.6.1",
+  "version": "26.7.0",
   "type": "module",
   "description": "Server for LiteJS full-stack framework",
   "license": "MIT",
