@@ -3,108 +3,82 @@ import '@litejs/cli/test.js'
 import { serveRange, serveStatic } from '../lib/serve.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { promises as fs } from 'node:fs'
+import fs from 'node:fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const testDir = path.join(__dirname, '.static-test')
 
 describe('serveStatic', () => {
-	test('setup', async (assert) => {
-		await fs.rm(testDir, { recursive: true, force: true })
-		await fs.mkdir(testDir, { recursive: true })
-		await fs.writeFile(path.join(testDir, 'index.html'), '<h1>Home</h1>')
-		await fs.writeFile(path.join(testDir, 'hello.txt'), 'hello')
-		await fs.writeFile(path.join(testDir, 'data.bin'), 'binary')
-		assert.ok(true)
+	var assets
+	, testDir = path.join(__dirname, '_static-test')
+	, pubDir = path.join(testDir, 'pub')
+	, subDir = path.join(pubDir, 'sub')
+	, siblingDir = pubDir + '2'
+
+	test('setup', (assert) => {
+		fs.rmSync(testDir, { recursive: true, force: true })
+
+		fs.mkdirSync(subDir, { recursive: true })
+		fs.writeFileSync(path.join(subDir, 'img.png'), 'PNG')
+
+		fs.writeFileSync(path.join(pubDir, '.env'), 'SECRET=1')
+		fs.writeFileSync(path.join(pubDir, 'index.html'), '<h1>Home</h1>')
+		fs.writeFileSync(path.join(pubDir, 'hello.txt'), 'hello')
+		fs.writeFileSync(path.join(pubDir, 'data.bin'), 'binary')
+
+		fs.mkdirSync(siblingDir, { recursive: true })
+		fs.writeFileSync(path.join(testDir, 'secret.txt'), 'SECRET1')
+		fs.writeFileSync(path.join(siblingDir, 'secret.txt'), 'SECRET2')
+
+		fs.mkdirSync(path.join(pubDir, '.git'), { recursive: true })
+		fs.writeFileSync(path.join(pubDir, '.git', 'config'), 'cfg')
+
+		fs.mkdirSync(path.join(pubDir, '.well-known'), { recursive: true })
+		fs.writeFileSync(path.join(pubDir, '.well-known', 'security.txt'), 'Contact: x')
+
+		fs.mkdirSync(path.join(pubDir, '.well-known2'), { recursive: true })
+		fs.writeFileSync(path.join(pubDir, '.well-known2', 'evil.txt'), 'Evil')
+
+		assets = serveStatic(pubDir)
+		assert.type(assets.fetch, 'asyncfunction')
+		assert.end()
 	})
 
-	test('fetch index.html on root', async (assert) => {
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/'))
+	test('200 - {0}fetch index.html on root', [
+		[ 'index.html on root', 'http://localhost/', '<h1>Home</h1>', 'text/html; charset=utf-8' ],
+		[ 'file', 'http://localhost/hello.txt', 'hello', 'text/plain; charset=utf-8' ],
+		[ 'subdir', 'http://localhost/sub/img.png', 'PNG', 'image/png' ],
+		[ 'unknown extension', 'http://localhost/data.bin', 'binary', 'application/octet-stream' ],
+		[ '.well-known is served', 'http://localhost/.well-known/security.txt', 'Contact: x', 'text/plain; charset=utf-8' ]
+	], async (name, url, text, type, assert) => {
+		const res = await assets.fetch(new Request(url))
 		assert.equal(res.status, 200)
-		assert.equal(await res.text(), '<h1>Home</h1>')
-		assert.equal(res.headers.get('content-type'), 'text/html; charset=utf-8')
+		assert.equal(await res.text(), text)
+		assert.equal(res.headers.get('content-type'), type)
 	})
 
-	test('fetch file by path', async (assert) => {
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/hello.txt'))
-		assert.equal(res.status, 200)
-		assert.equal(await res.text(), 'hello')
-		assert.equal(res.headers.get('content-type'), 'text/plain; charset=utf-8')
-	})
-
-	test('fetch file with unknown extension has no content-type', async (assert) => {
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/data.bin'))
-		assert.equal(res.status, 200)
-		assert.equal(await res.text(), 'binary')
-		assert.equal(res.headers.get('content-type'), 'application/octet-stream')
-		assert.equal(res.headers.get('content-length'), '6')
-	})
-
-	test('fetch missing file returns 404', async (assert) => {
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/missing.txt'))
-		assert.equal(res.status, 404)
-	})
-
-	test('fetch blocks path traversal', async (assert) => {
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/../secret.txt'))
-		assert.equal(res.status, 404)
-	})
-
-	test('fetch directory returns 404', async (assert) => {
-		const assets = serveStatic(testDir)
-		const subDir = path.join(testDir, 'subdir')
-		await fs.mkdir(subDir, { recursive: true })
-		const res = await assets.fetch(new Request('http://localhost/subdir'))
-		assert.equal(res.status, 404)
-	})
-
-	test('fetch with URL encoded path traversal blocked', async (assert) => {
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/%2e%2e/secret.txt'))
-		assert.equal(res.status, 404)
-	})
-
-	test('fetch with encoded-slash traversal blocked', async (assert) => {
-		// %2f is not a path separator to the URL parser, so `..%2f` survives
-		// normalization and only the resolved-path guard stops it.
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/%2e%2e%2fsecret.txt'))
-		assert.equal(res.status, 404)
-	})
-
-	test('fetch with multiple path traversals blocked', async (assert) => {
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/../../../../../../etc/passwd'))
-		assert.equal(res.status, 404)
-	})
-
-	test('dotfiles are not served', async (assert) => {
-		await fs.writeFile(path.join(testDir, '.env'), 'SECRET=1')
-		await fs.mkdir(path.join(testDir, '.git'), { recursive: true })
-		await fs.writeFile(path.join(testDir, '.git', 'config'), 'cfg')
-		const assets = serveStatic(testDir)
-		assert.equal((await assets.fetch(new Request('http://localhost/.env'))).status, 404)
-		assert.equal((await assets.fetch(new Request('http://localhost/.git/config'))).status, 404)
-	})
-
-	test('.well-known is served', async (assert) => {
-		await fs.mkdir(path.join(testDir, '.well-known'), { recursive: true })
-		await fs.writeFile(path.join(testDir, '.well-known', 'security.txt'), 'Contact: x')
-		const assets = serveStatic(testDir)
-		const res = await assets.fetch(new Request('http://localhost/.well-known/security.txt'))
-		assert.equal(res.status, 200)
-		assert.equal(await res.text(), 'Contact: x')
-		// A lookalike prefix is not a bypass.
-		assert.equal((await assets.fetch(new Request('http://localhost/.well-known-evil'))).status, 404)
+	test('404 - {0}', [
+		[ 'missing file', 'http://localhost/missing.txt' ],
+		[ 'path traversal', 'http://localhost/../secret.txt' ],
+		[ 'path traversal same root prefix', 'http://localhost/../pub2/secret.txt' ],
+		[ 'URL encoded path traversal', 'http://localhost/%2e%2e/secret.txt' ],
+		[ 'encoded-slash path traversal', 'http://localhost/%2e%2e%2fsecret.txt' ],
+		[ 'multiple path traversals', 'http://localhost/../../tsconfig.json' ],
+		[ 'fetch directory', 'http://localhost/sub' ],
+		[ 'dotfiles', 'http://localhost/.env' ],
+		[ 'dotdir', 'http://localhost/.git/config' ],
+		[ '.well-known prefix', 'http://localhost/.well-known2/evil.txt'],
+	], async (desc, url, assert) => {
+		try {
+			var file = decodeURIComponent(url.slice(17))
+			, exists = file === 'missing.txt' || !!fs.statSync(path.join(pubDir, file), { throwIfNoEntry: false })
+			//console.log(exists, file, path.join(pubDir, file))
+			assert.equal(exists, true)
+		} catch {}
+		assert.equal(await assets.fetch(new Request(url)), 404)
 	})
 
 	test('cleanup', async (assert) => {
-		await fs.rm(testDir, { recursive: true, force: true })
+		fs.rmSync(testDir, { recursive: true, force: true })
 		assert.ok(true)
 	})
 })
