@@ -88,6 +88,22 @@ describe('app', () => {
 		assert.equal(result, 404)
 	})
 
+	test('method with no routes 404s at root instead of matching empty alternation', async (assert) => {
+		var app = App()
+		app.use(() => {})
+		app.get('test', () => 'ok')
+		assert.equal(await app(createReq('/', 'POST')), 404)
+		assert.equal(await app(createReq('/', 'DELETE')), 404)
+	})
+
+	test('mount: unimplemented method 404s at mount root, not just sub-paths', async (assert) => {
+		var sub = App()
+		sub.get('', () => 'sub root')
+		var app = App()
+		app.mount('api', sub)
+		assert.equal(await app(createReq('/api', 'DELETE')), 404)
+	})
+
 	test('env forwarded to handlers', [
 		[undefined, { defined: false, R2: undefined }],
 		[{ R2: {} }, { defined: true, R2: true }],
@@ -301,6 +317,7 @@ describe('router', () => {
 		var r2 = Router()
 		var called = false
 		r2.use(() => { called = true })
+		r2.add('', () => {})
 		var result = await r2.handle({ path: '/' })
 		assert.equal(called, true)
 		assert.equal(result, undefined)
