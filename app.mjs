@@ -46,23 +46,21 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 		},
 		async handle(req, env, ctx) {
 			var match = req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
-			if (!match) return opts?.notFound?.(req, env, ctx) ?? 404
 			// Handlers and middleware throw on error; the worker owns error -> response.
-			for (var end, m, res, pos = 0, len = routes.length, param = req.param ??= {}; pos < len; pos = end) {
+			if (match) for (var end, m, pos = 0, len = routes.length, param = req.param ??= {}; pos < len; pos = end) {
 				end = routes[pos + 1]
 				if ((m = routes[pos++]) < 1) {
 					// Middleware: [0, end, ...fns]
-					for (; !res && ++pos < end; ) if ((res = await routes[pos](req, env, ctx))) end = len
+					for (; ++pos < end; ) if ((m = await routes[pos](req, env, ctx))) return m
 				} else if (match[m] != null) {
 					// Matched route: [group, end, routeStr, ...paramNames, handler]
 					req.route = routes[++pos]
 					for (end--; ++pos < end; ) param[routes[pos]] = decodeURIComponent(match[++m])
 					m = routes[pos]
-					res = isFn(m) ? await m(req, env, ctx) : m
-					end = len
+					return isFn(m) ? m(req, env, ctx) : m
 				}
 			}
-			return res
+			return opts?.notFound?.(req, env, ctx) ?? 404
 		}
 	}
 }
