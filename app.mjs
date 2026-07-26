@@ -45,9 +45,10 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 			routes.push(0, 2 + routes.length + fns.length, ...fns)
 		},
 		async handle(req, env, ctx) {
-			var match = req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
+			var end, m, pos = 0, len = routes.length, param = req.param ??= {}
+			, match = req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
 			// Handlers and middleware throw on error; the worker owns error -> response.
-			if (match) for (var end, m, pos = 0, len = routes.length, param = req.param ??= {}; pos < len; pos = end) {
+			if (match) for (; pos < len; pos = end) {
 				end = routes[pos + 1]
 				if ((m = routes[pos++]) < 1) {
 					// Middleware: [0, end, ...fns]

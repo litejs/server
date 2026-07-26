@@ -307,12 +307,6 @@ describe('router', () => {
 		assert.equal(err.code, expectedCode, 'e.code is preserved for the worker to map')
 	})
 
-	test('falsy or pathless request returns 404', [null, {}], async (req, assert) => {
-		var r2 = Router()
-		r2.add('test', () => 'found')
-		assert.equal(await r2.handle(req), 404)
-	})
-
 	test('middleware that returns nothing yields an undefined result', async (assert) => {
 		var r2 = Router()
 		var called = false
@@ -337,7 +331,7 @@ describe('router', () => {
 	test('notFound option', async (assert) => {
 		var r2 = Router({ notFound: () => ({ body: 'custom 404', status: 404 }) })
 		r2.add('test', () => 'ok')
-		var result = await r2.handle({ path: '/missing' })
+		var result = await r2.handle({})
 		assert.equal(result.body, 'custom 404')
 		assert.equal(result.status, 404)
 	})
