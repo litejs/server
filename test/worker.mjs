@@ -7,6 +7,10 @@ describe('worker adapter', () => {
 		return worker(handler)(new Request('http://localhost' + path, opts), env)
 	}
 
+	test('a malformed url return 400', async (assert) => {
+		assert.equal((await send(() => 202, '/p/100%')).status, 400)
+	})
+
 	test('normalizes a handler result to a {1} Response with body {2}', [
 		[() => ({ a: 1 }), 200, '{"a":1}', 'application/json'], // an object is JSON
 		[() => [1, 2], 200, '[1,2]', 'application/json'], // an array is JSON too
