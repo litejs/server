@@ -42,7 +42,7 @@ describe('loadEnv', () => {
 
 	test('SERVER_NAME is the https origin when HTTPS is configured', (assert, mock) => {
 		mock.swap(process, 'env', {})
-		assert.equal(loadEnv(null, { HTTPS_KEY: 'k', HTTPS_CERT: 'c', HTTPS_PORT: 444 }).SERVER_NAME, 'https://127.0.0.1:444')
+		assert.equal(loadEnv({ HTTPS_KEY: 'k', HTTPS_CERT: 'c', HTTPS_PORT: 444 }).SERVER_NAME, 'https://127.0.0.1:444')
 		assert.equal(loadEnv(null, { HTTPS_KEY: 'k', HTTPS_CERT: 'c' }).SERVER_NAME, 'https://127.0.0.1:8443', 'HTTPS_PORT defaults to 8443')
 		assert.equal(loadEnv(null, { HTTPS_KEY: 'k' }).SERVER_NAME, 'http://127.0.0.1:8080', 'key alone does not switch the scheme')
 		assert.end()
