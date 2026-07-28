@@ -1,5 +1,6 @@
 
 import '@litejs/cli/test.js'
+import { App } from '../index.mjs'
 import { worker } from '../lib/worker.mjs'
 
 describe('worker adapter', () => {
@@ -141,3 +142,31 @@ describe('worker adapter', () => {
 		assert.equal(await res.text(), '', 'body is stripped for HEAD')
 	})
 })
+
+
+describe('worker integration', () => {
+	var app = App()
+	, menu = App()
+	, server = worker(app)
+	, handler = req => [req.fullPath, req.path, req.param]
+
+	app.get('hi', handler)
+	app.get('menü', handler)
+
+	app.mount('menu', menu)
+
+	menu.get('{order}', handler)
+
+	test('encoding {i}', [
+		[ '/hi', ['/hi', '/hi', {}] ],
+		[ '/men%C3%BC', ['/menü', '/men%C3%BC', {}] ],
+		[ '/menu/caf%C3%A9', ['/menu/café', '/caf%C3%A9', { order: 'café' }] ],
+		[ '/menu/a%2Fb', ['/menu/a%2Fb', '/a%2Fb', { order: 'a/b' }] ],
+		[ '/menu/a%252Fb', ['/menu/a%2Fb', '/a%252Fb', { order: 'a%2Fb' }] ],
+	], async (url, expected, assert) => {
+		var res = await server(new Request('http://localhost' + url))
+		assert.equal(await res.json(), expected)
+	})
+
+})
+

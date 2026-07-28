@@ -203,7 +203,7 @@ describe('router', () => {
 	function createReq(url, method = 'GET') {
 		var urlObj = new URL(url, 'http://localhost')
 		var req = new Request(urlObj, { method })
-		req.path = decodeURI(urlObj.pathname)
+		req.path = urlObj.pathname
 		return req
 	}
 

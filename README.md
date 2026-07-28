@@ -62,6 +62,8 @@ Set the status with `req.resStatus = 409`, extra headers with `req.resHeaders.al
 Thrown errors map to `err.code || 500`; 5xx bodies are kept generic.
 
 Requests include `param`, `path`, `fullPath`, `query`, `searchParams`, and `header(name)`.
+Routes match against `path`, the raw percent-encoded pathname;
+`fullPath` and `param` values are decoded.
 
 ### Routes
 

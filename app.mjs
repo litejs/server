@@ -3,7 +3,7 @@ import { isFn } from './util.mjs'
 
 
 var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
-, routeEsc = s => s.replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
+, routeEsc = s => encodeURI(s).replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
 , App = opts => {
 	var methods = { DELETE: 'del', GET: 'get', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, keys = Object.keys(methods)
@@ -15,11 +15,14 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	each((_, method) => app[methods[method]] = (routers[method] = Router(opts)).add)
 
 	app.all = (route, handler, _raw) => each(r => r.add(route, handler, _raw))
-	app.mount = (path, sub) => app.all(
-		path,
-		(req, env, ctx) => (req.path = req.path.slice((req.mount = path).length + 1) || '/', sub(req, env, ctx)),
-		routeEsc(path) + '(?:\\/.*|)'
-	)
+	app.mount = (path, sub) => {
+		var encLen = encodeURI(path).length + 1
+		app.all(
+			path,
+			(req, env, ctx) => (req.mount = path, req.path = req.path.slice(encLen) || '/', sub(req, env, ctx)),
+			routeEsc(path) + '(?:\\/.*|)'
+		)
+	}
 	app.use = (...fns) => each(r => r.use(...fns))
 
 	return app
