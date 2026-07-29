@@ -3,7 +3,7 @@ import '@litejs/cli/test.js'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Cache, DB, D1, DurableObject, KV, R2, durableAlarms, durableObject, evict, kvMap, migrate, parseCron, startCron, toUint } from '../index.mjs'
+import { Cache, DB, D1, DurableObject, DO, KV, R2, durableAlarms, durableObject, evict, kvMap, migrate, parseCron, startCron, toUint } from '../index.mjs'
 
 
 describe('Cache', () => {
@@ -545,94 +545,71 @@ describe('DO', () => {
 		assert.equal(sql.exec('SELECT COUNT(*) AS n FROM items').one().n, 3)
 	})
 
-	test('alarm: set/get/delete and override', (assert) => {
-		var stub = makeNS(MyDO).getByName('a')
-		assert.equal(stub.ctx.storage.getAlarm(), null)
-		var t = Date.now() + 60000
-		stub.ctx.storage.setAlarm(t)
-		assert.equal(stub.ctx.storage.getAlarm(), t)
-		stub.ctx.storage.setAlarm(t + 1)
-		assert.equal(stub.ctx.storage.getAlarm(), t + 1)
-		stub.ctx.storage.deleteAlarm()
-		assert.equal(stub.ctx.storage.getAlarm(), null)
-		assert.end()
-	})
-
-	test('alarm fires handler with retry metadata', (assert) => {
-		class WithAlarm extends DurableObject {
+	test('alarm', (assert, mock) => {
+		var fired = []
+		class WithAlarm extends DO {
+			static schema = ['CREATE TABLE fired (id INTEGER PRIMARY KEY, name TEXT)']
 			alarm(info) {
 				assert.equal(info.retryCount, 0)
 				assert.equal(info.isRetry, false)
-				assert.equal(this.ctx.storage.getAlarm(), null)
-				assert.end()
+				assert.equal(this.ctx.storage.getAlarm(), null, 'consumed before the handler runs')
+				fired.push(this.ctx.id.name)
+				this.ctx.storage.sql.exec('INSERT INTO fired (name) VALUES (?)', this.ctx.id.name)
 			}
 		}
-		makeNS(WithAlarm).getByName('a').ctx.storage.setAlarm(Date.now())
-	})
-
-	test('alarm overrides previous and deleteAlarm prevents firing', (assert) => {
-		var fired = 0
-		class WithAlarm extends DurableObject {
-			alarm() { fired++ }
-		}
+		mock.time()
 		var ns = makeNS(WithAlarm)
 		var s1 = ns.getByName('a')
-		s1.ctx.storage.setAlarm(Date.now() + 10)
-		s1.ctx.storage.setAlarm(Date.now() + 15)   // overrides
+		s1.ctx.storage.setAlarm(Date.now() - 1000)
+		s1.ctx.storage.setAlarm(Date.now() + 30 * 864e5) // 30 days overflows setTimeout's 2^31-1ms
 		var s2 = ns.getByName('b')
 		s2.ctx.storage.setAlarm(Date.now() + 10)
 		s2.ctx.storage.deleteAlarm()               // prevents
-		setTimeout(() => {
-			assert.equal(fired, 1, 'only the surviving alarm fired')
-			assert.end()
-		}, 50)
+		mock.tick(50)
+		assert.equal(fired, [])
+		mock.tick(30 * 864e5)
+		assert.equal(fired, ['a'])
+		// reacquire Durable Object stubs as advancing time by 30 days evicts DO
+		assert.equal(ns.getByName('a').ctx.storage.sql.exec('SELECT name FROM fired').raw(), [['a']])
+		assert.equal(ns.getByName('b').ctx.storage.sql.exec('SELECT name FROM fired').raw(), [])
+		assert.end()
 	})
 
-	test('alarm schedules retry on error', (assert) => {
+	test('alarm schedules retry on error', async (assert, mock) => {
 		class WithAlarm extends DurableObject {
 			alarm() { throw Error('fail') }
 			myAlarm(t) { this.ctx.storage.setAlarm(t) }
 		}
+		mock.time()
 		var stub = makeNS(WithAlarm).getByName('a')
 		stub.myAlarm(Date.now())
-		setTimeout(() => {
-			assert.ok(stub.ctx.storage.getAlarm() != null, 'retry scheduled')
-			stub.ctx.storage.deleteAlarm()
-			assert.end()
-		}, 2)
+		mock.tick(1)
+		// fireAlarm awaits the handler, so the catch that reschedules runs a microtask later
+		await null
+		assert.ok(stub.ctx.storage.getAlarm() != null, 'retry scheduled')
+		// Disarm, restore() ticks every pending timer once the test ends
+		stub.ctx.storage.deleteAlarm()
 	})
 
-	test('alarm runs against instance storage', (assert) => {
+	test('durableObject restores timers from pre-populated alarms map', async (assert, mock) => {
+		var fired = 0
 		class WithAlarm extends DurableObject {
-			static schema = ['CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)']
-			constructor(ctx, env) {
-				super(ctx, env)
-				migrate(ctx.storage.sql, WithAlarm.schema)
-			}
-			alarm() {
-				this.ctx.storage.sql.exec('INSERT INTO items (name) VALUES (?)', 'from-alarm')
-				assert.equal(this.ctx.storage.sql.exec('SELECT * FROM items').one().name, 'from-alarm')
-				assert.end()
-			}
-		}
-		makeNS(WithAlarm).getByName('a').ctx.storage.setAlarm(Date.now() + 30)
-	})
-
-	test('durableObject restores timers from pre-populated alarms map', (assert) => {
-		class WithAlarm extends DurableObject {
-			alarm() { assert.end() }
+			alarm() { fired++ }
 		}
 		var dir = mkdtempSync(join(rootDir, 'ns-'))
 		// Compute the key the way idFromName would
-		var ns0 = durableObject(WithAlarm, dir, {})
-		var key = ns0.idFromName('a').toString()
+		, ns0 = durableObject(WithAlarm, dir, {})
+		, key = ns0.idFromName('a').toString()
 
+		mock.time()
 		// Pre-populate the alarms map and pass it to a fresh namespace
 		var alarms = new Map([[key, { time: Date.now() + 2 }]])
 		durableObject(WithAlarm, dir, {}, alarms)
-		// The pre-populated entry should now have a timer scheduled
-		assert.ok("timer" in alarms.get(key), 'timer field set (may be undefined in some runtimes via unref?.())')
-		// Wait for fire
+		// The pre-populated entry should now have a real, cancellable timer
+		assert.ok(alarms.get(key).timer, 'a timer handle is kept, not unref()\'s return value')
+		mock.tick(2)
+		await null
+		assert.equal(fired, 1, 'the restored timer fires its alarm')
 	})
 
 	test('durableAlarms: hydrates from DB, writes through on set/delete, survives close', (assert) => {
@@ -1039,4 +1016,3 @@ describe('cron', () => {
 		})
 	})
 })
-
