@@ -126,6 +126,8 @@ describe('serveRange', () => {
 		var unsized = new Response(body, { headers: { 'content-type': 'text/plain' } })
 		unsized.headers.delete('content-length')
 		assert.strictEqual(await serveRange(get({ range: 'bytes=0-1' }), unsized), unsized, 'unknown content-length')
+		var bodyless = new Response(null, { headers: { 'content-length': '10' } })
+		assert.strictEqual(await serveRange(get({ range: 'bytes=0-1' }), bodyless), bodyless, 'a length with no body')
 	})
 })
 

@@ -95,7 +95,7 @@ const env = loadEnv(".env.json", {
     DEVICE: KV(db, "device"),
 })
 const server = listen(app, env)
-app.get("/{path*}", env.ASSETS.fetch)
+app.get("{path*}", env.ASSETS.fetch)
 
 // Attach SIGINT/SIGTERM/SIGHUP/uncaughtException
 setupShutdown([ server ])
