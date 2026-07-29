@@ -265,16 +265,23 @@ describe('s3.mjs', () => {
 
 	test('list empty bucket', async (assert) => {
 		var s3 = mock(function() {
-			return new Response(
-				'<ListBucketResult>' +
-				'<IsTruncated>false</IsTruncated>' +
-				'</ListBucketResult>'
-			)
+			return new Response('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>')
 		})
 		var res = await s3.list()
 		assert.equal(res.objects.length, 0)
 		assert.equal(res.truncated, false)
 
+	})
+
+	test('list a truncated page that carries no keys', async (assert) => {
+		// S3 returns this when a page is entirely CommonPrefixes or filtered out.
+		var s3 = mock(function() {
+			return new Response('<ListBucketResult><IsTruncated>true</IsTruncated></ListBucketResult>')
+		})
+		var res = await s3.list()
+		assert.equal(res.objects.length, 0)
+		assert.equal(res.truncated, true)
+		assert.equal(res.cursor, undefined, 'no key to resume from, and no throw')
 	})
 
 	test('url returns presigned URL string', async (assert) => {
