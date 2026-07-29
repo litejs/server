@@ -39,11 +39,13 @@ var fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 	socket.on('error', reject)
 	socket.on('close', () => {
 		var end = buf.indexOf('\r\n\r\n')
+		, head = buf.slice(0, end)
 		, body = buf.slice(end + 4)
 		// Responses here are small enough to arrive in a single chunk.
 		resolve({
 			status: +buf.slice(9, 12),
-			body: /^transfer-encoding: *chunked/im.test(buf.slice(0, end)) ? body.split('\r\n')[1] || '' : body,
+			location: (head.match(/^location: *(.*)$/im) || [])[1],
+			body: /^transfer-encoding: *chunked/im.test(head) ? body.split('\r\n')[1] || '' : body,
 		})
 	})
 })
@@ -109,14 +111,15 @@ describe('node adapter', !skip && (() => {
 			await untilReady(() => fetch(origin))
 
 			var empty = await rawGet(port, '/pub//file')
-			assert.equal(empty.body, origin + ' /pub//file', 'an empty path segment is left alone')
+			assert.equal(empty.status, 301, 'an empty path segment redirects')
+			assert.equal(empty.location, '/pub/file', 'the duplicate slash is collapsed')
 
 			// A leading // is a path here, not a network-path reference.
 			var authority = await rawGet(port, '//evil.com/x')
-			assert.equal(authority.body, origin + ' //evil.com/x', 'the target never supplies the authority')
+			assert.equal(authority.location, '/evil.com/x', 'the redirect carries no authority at all')
 
 			var slashes = await rawGet(port, '///')
-			assert.equal(slashes.body, origin + ' ///', 'a bare /// is served')
+			assert.equal(slashes.location, '/', 'a bare /// collapses to the root')
 
 			// Absolute-form is already a url, and per RFC 9112 its authority wins over Host.
 			// Deno resolves it the same way.
@@ -138,7 +141,7 @@ describe('node adapter', !skip && (() => {
 				'\\x',
 			]) assert.equal((await rawGet(port, target)).status, 400, 'refuses ' + target)
 
-			assert.equal((await rawGet(port, '/pub//file')).status, 200, 'the server is still up')
+			assert.equal((await rawGet(port, '/pub/file')).status, 200, 'the server is still up')
 		} finally {
 			server.close()
 		}

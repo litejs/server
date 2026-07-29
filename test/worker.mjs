@@ -12,6 +12,22 @@ describe('worker adapter', () => {
 		assert.equal((await send(() => 202, '/p/100%')).status, 400)
 	})
 
+	// Location is relative, so a client-supplied Host cannot steer the redirect.
+	test('{0} redirects to {1}', [
+		[ '/a//b', '/a/b' ],
+		[ '//', '/' ],
+		[ '/a//', '/a/' ],
+		[ '/a///b//c', '/a/b/c' ], // runs of slashes collapse to one
+		[ '/a//b?x=1&y=2', '/a/b?x=1&y=2' ], // the query is kept
+	], async (path, expected, assert) => {
+		var called = 0
+		, res = await send(() => (called++, 'body'), path)
+		assert.equal(res.status, 301)
+		assert.equal(res.headers.get('location'), expected)
+		assert.equal(await res.text(), '', 'the redirect has no body')
+		assert.equal(called, 0, 'the handler is not run')
+	})
+
 	test('normalizes a handler result to a {1} Response with body {2}', [
 		[() => ({ a: 1 }), 200, '{"a":1}', 'application/json'], // an object is JSON
 		[() => [1, 2], 200, '[1,2]', 'application/json'], // an array is JSON too
