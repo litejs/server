@@ -32,13 +32,13 @@ type Equal<A, B> =
 type Expect<T extends true> = T
 
 const app = App()
-app.get("/users/{id}", req => ({ id: req.param.id }))
-app.get("/files/{path*}", req => req.param.path)
-app.post("/users", async (req, env, ctx) => (ctx.waitUntil(Promise.resolve()), 201))
-app.all("/health", "OK")
+app.get("users/{id}", req => ({ id: req.param.id }))
+app.get("files/{path*}", req => req.param.path)
+app.post("users", async (req, env, ctx) => (ctx.waitUntil(Promise.resolve()), 201))
+app.all("health", "OK")
 app.use(req => { req.resHeaders["x-served-by"] = "litejs" })
-app.mount("/api", App())
-app.get("/cached", dedupe(async req => req.path))
+app.mount("api", App())
+app.get("cached", dedupe(async req => req.path))
 
 const db = new DB(":memory:")
 const kv = KV(db, "kv")

@@ -73,6 +73,7 @@ export interface RouterInstance {
 	handle(req: ServerRequest, env: Env, ctx: Ctx): Promise<HandlerResult>
 }
 
+// Route and mount paths are written without leading and trailing '/' - 'hello/{name}' NOT '/hello/{name}/'
 export interface AppInstance {
 	(req: ServerRequest, env: Env, ctx: Ctx): Promise<HandlerResult>
 	routers: Record<string, RouterInstance>

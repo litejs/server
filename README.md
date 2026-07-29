@@ -28,6 +28,7 @@ app.use((req, env) => {
 	// return a response to stop further execution
 })
 
+// Route paths are written without leading and trailing '/'
 // Only single, first matching route get executed!
 app.get('hello/world', (req, env) => 'Hello MOON!')
 app.get('hello/{name}', (req, env) => 'Hello ' + req.param.name)
@@ -36,7 +37,7 @@ app.get('bye/moon', (req, env) => { /* Never executed as previous handler matche
 app.get('teapot', (req) => (req.resStatus = 418, "no coffee"))
 app.get('notFound', () => 404) // Return a number to send status code
 
-// Group routes and mount under a prefix
+// Group routes and mount under a prefix, also without leading and trailing '/'
 const subApp = App()
 .post("", (req, env) => {
     // GET /api -> req.path == '/' and req.fullPath == '/api'

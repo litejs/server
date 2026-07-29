@@ -147,6 +147,36 @@ describe('node adapter', !skip && (() => {
 		}
 	})
 
+	test('a body stream that errors mid-response does not down the server', async (assert, mock) => {
+		mock.swap(console, 'log', () => {})
+		var port = 18726
+		, base = 'http://127.0.0.1:' + port
+		, app = App()
+		app.get('boom', () => new Response(new ReadableStream({
+			start(c) {
+				c.enqueue(new TextEncoder().encode('partial'))
+				setTimeout(() => c.error(new Error('disk blew up')), 20)
+			}
+		}), { headers: { 'content-length': '999' } }))
+		app.get('hi', () => 'world')
+
+		var server = listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		try {
+			await untilReady(() => fetch(base + '/hi'))
+			// Headers are already sent, so the client can only see a cut-off body.
+			var cut = 0
+			try {
+				await (await fetch(base + '/boom')).text()
+			} catch (e) {
+				cut = 1
+			}
+			assert.ok(cut, 'the truncated body is reported to the client')
+			assert.equal(await (await fetch(base + '/hi')).text(), 'world', 'the server is still up')
+		} finally {
+			server.close()
+		}
+	})
+
 	test('serves over HTTPS and rotates certs on reload', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		var app = App()

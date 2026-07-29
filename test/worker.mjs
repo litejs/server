@@ -133,6 +133,21 @@ describe('worker adapter', () => {
 		assert.equal(await res.text(), '', 'no message, empty body')
 	})
 
+	test('shaping failure is a logged 500, not a rejection: {0}', [
+		[ 'an invalid header value', req => (req.resHeaders.Location = '/x\r\nX-Injected: 1', 302) ],
+		[ 'a circular object', () => { var o = {}; o.self = o; return o } ],
+		[ 'a BigInt field', () => ({ n: 1n }) ],
+		[ 'an unconstructable body', () => Symbol('nope') ],
+		[ 'a toJSON that throws a non-Error', () => ({ toJSON() { throw 'no stack' } }) ],
+	], async (_, handler, assert, mock) => {
+		mock.swap(console, 'error', mock.fn())
+		var res = await send(handler, '/')
+		assert.equal(res.status, 500)
+		assert.equal(await res.text(), 'Internal Server Error', 'internal message is not leaked')
+		assert.equal(res.headers.get('x-injected'), null, 'no header survives a failed shaping')
+		assert.equal(console.error.called, 1, 'error is logged server-side')
+	})
+
 	test('a throw with no stack is logged as the thrown value itself', async (assert, mock) => {
 		mock.swap(console, 'error', mock.fn())
 		await send(() => { throw 'boom' }, '/')
