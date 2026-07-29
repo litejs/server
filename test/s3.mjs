@@ -520,5 +520,51 @@ describe('awsApi', () => {
 		assert.notOk(await awsVerify(new Request('https://s3.us-east-1.amazonaws.com/bucket/key'), getSecret))
 		assert.notOk(await awsVerify(new Request('https://s3.us-east-1.amazonaws.com/bucket/key', { headers: { authorization: 'Basic xyz' } }), getSecret), 'unparseable header')
 	})
+
+	// Dates are relative to now, a signature is only valid inside its own window.
+	function longDateAt(offsetSec) {
+		return new Date(Date.now() + 1000 * offsetSec).toJSON().replace(/-|:|\.\d*/g, '')
+	}
+
+	test('verify rejects a presigned url {0}', [
+		[ 'past its expiry', -3600, 60, false ],
+		[ 'one second past its expiry', -61, 60, false ],
+		[ 'dated far in the future', 3600, 60, false ],
+		[ 'still inside its expiry', -30, 60, 'AKID' ],
+		[ 'signed a week ago with the default expiry', -604000, 0, 'AKID' ],
+		[ 'signed over a week ago', -605000, 0, false ],
+	], async function(name, offsetSec, expires, expected, assert) {
+		var sign = awsApi(opts)
+		, url = await sign.url('bucket/key', { date: longDateAt(offsetSec), ...expires && { expires } })
+		assert.equal(await awsVerify(new Request(url), getSecret), expected)
+	})
+
+	test('verify rejects a header-signed request outside the skew window', async (assert) => {
+		var req
+		, api = awsApi(Object.assign({
+			fetch: (url, init) => (req = new Request(url, { headers: init.headers }), new Response())
+		}, opts))
+		// awsVerify reads the clock through Date.now, so move it instead of the signing date.
+		, verifyAt = async (offsetSec, skew) => {
+			var realNow = Date.now
+			Date.now = () => realNow() + 1000 * offsetSec
+			try { return await awsVerify(req, getSecret, skew) } finally { Date.now = realNow }
+		}
+		await api.request('GET', 'bucket/key', '')
+
+		assert.equal(await verifyAt(0), 'AKID', 'a fresh request verifies')
+		assert.equal(await verifyAt(899), 'AKID', 'inside the default 15 min skew')
+		assert.equal(await verifyAt(901), false, 'a replay past the skew is rejected')
+		assert.equal(await verifyAt(-901), false, 'a future date is rejected')
+		assert.equal(await verifyAt(901, 1800), 'AKID', 'skew is configurable')
+	})
+
+	test('verify rejects a signature that is not hex of the right length', async (assert) => {
+		var sign = awsApi(opts)
+		, url = await sign.url('bucket/key')
+		, sig = /X-Amz-Signature=(\w+)/.exec(url)[1]
+		assert.equal(await awsVerify(new Request(url.replace(sig, sig.slice(0, 32))), getSecret), false, 'a prefix is not accepted')
+		assert.equal(await awsVerify(new Request(url.replace(sig, sig + '00')), getSecret), false, 'a longer signature is not accepted')
+	})
 })
 

@@ -344,7 +344,7 @@ export interface AwsApi {
 }
 
 export function awsApi(opts: AwsApiOptions): AwsApi
-export function awsVerify(req: Request, getSecret: (id: string) => string | undefined | Promise<string | undefined>): Promise<string | false | undefined>
+export function awsVerify(req: Request, getSecret: (id: string) => string | undefined | Promise<string | undefined>, skew?: number): Promise<string | false | undefined>
 
 export interface S3Bucket extends AwsApi {
 	get(key: string): Promise<R2ObjectBody | null>
