@@ -6,6 +6,7 @@ import { listen as listenSW, serveCache } from '../lib/service-worker.mjs'
 import * as bun from '../lib/bun.mjs'
 import * as deno from '../lib/deno.mjs'
 import https from 'node:https'
+import net from 'node:net'
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -26,6 +27,25 @@ var fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 		res.on('data', d => body += d)
 		res.on('end', () => resolve({ status: res.statusCode, body, fp: res.socket.getPeerCertificate().fingerprint256 }))
 	}).on('error', reject)
+})
+// fetch() normalizes the request target before sending, so odd paths need a raw request line.
+, rawGet = (port, target, host = '127.0.0.1:' + port) => new Promise((resolve, reject) => {
+	var buf = ''
+	, socket = net.connect(port, '127.0.0.1', () => socket.write(
+		'GET ' + target + ' HTTP/1.1\r\nHost: ' + host + '\r\nConnection: close\r\n\r\n'
+	))
+	socket.setEncoding('utf8')
+	socket.on('data', d => buf += d)
+	socket.on('error', reject)
+	socket.on('close', () => {
+		var end = buf.indexOf('\r\n\r\n')
+		, body = buf.slice(end + 4)
+		// Responses here are small enough to arrive in a single chunk.
+		resolve({
+			status: +buf.slice(9, 12),
+			body: /^transfer-encoding: *chunked/im.test(buf.slice(0, end)) ? body.split('\r\n')[1] || '' : body,
+		})
+	})
 })
 
 // Test with swaped globals only in Node, on real runtime those are read-only.
@@ -76,6 +96,52 @@ describe('node adapter', !skip && (() => {
 		assert.equal(typeof server.close, 'function')
 		server.reload() // without a TLS listener reload is a no-op
 		server.close()
+	})
+
+	test('builds the url from the target without resolving it as relative', async (assert, mock) => {
+		mock.swap(console, 'log', () => {})
+		var port = 18725
+		, origin = 'http://127.0.0.1:' + port
+		// Every target below is unrouted, so notFound reports what the adapter built.
+		, app = App({ notFound: req => req.origin + ' ' + req.path })
+		, server = listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		try {
+			await untilReady(() => fetch(origin))
+
+			var empty = await rawGet(port, '/pub//file')
+			assert.equal(empty.body, origin + ' /pub//file', 'an empty path segment is left alone')
+
+			// A leading // is a path here, not a network-path reference.
+			var authority = await rawGet(port, '//evil.com/x')
+			assert.equal(authority.body, origin + ' //evil.com/x', 'the target never supplies the authority')
+
+			var slashes = await rawGet(port, '///')
+			assert.equal(slashes.body, origin + ' ///', 'a bare /// is served')
+
+			// Absolute-form is already a url, and per RFC 9112 its authority wins over Host.
+			// Deno resolves it the same way.
+			var absolute = await rawGet(port, 'http://elsewhere.test/x')
+			assert.equal(absolute.body, 'http://elsewhere.test /x', 'absolute-form is used as given')
+
+			var badHost = await rawGet(port, '/hi', 'bad host')
+			assert.equal(badHost.status, 400, 'a Host that cannot form a url returns 400')
+
+			for (var target of [
+				'foo/bar',
+				'../../etc/passwd',
+				'evil.com/x',
+				'javascript:alert(1)',
+				'file:///etc/passwd',
+				'htp://localhost/etc/passwd',
+				'data:text/html,x',
+				'127.0.0.1:' + port,
+				'\\x',
+			]) assert.equal((await rawGet(port, target)).status, 400, 'refuses ' + target)
+
+			assert.equal((await rawGet(port, '/pub//file')).status, 200, 'the server is still up')
+		} finally {
+			server.close()
+		}
 	})
 
 	test('serves over HTTPS and rotates certs on reload', async (assert, mock) => {
