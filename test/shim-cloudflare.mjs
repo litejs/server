@@ -454,6 +454,20 @@ describe('DO', () => {
 		assert.end()
 	})
 
+	test('an id that is not a bare digest is refused: {0}', [
+		[ 'a relative path', '../escaped' ],
+		[ 'an absolute path', '/tmp/escaped' ],
+		[ 'a short hex string', 'abc123' ],
+		[ 'uppercase hex', 'A'.repeat(64) ],
+		[ 'hex with a separator', 'a'.repeat(63) + '/' ],
+		[ 'empty', '' ],
+	], (name, bad, assert) => {
+		// An id names a sqlite file, so app code passing user input must not escape dir.
+		assert.throws(() => ns.idFromString(bad))
+		assert.throws(() => ns.get({ toString: () => bad }), 'get() is checked too')
+		assert.end()
+	})
+
 	test('getByName returns cached instance with ctx and env', (assert) => {
 		var a = ns.getByName('room1')
 		var b = ns.getByName('room1')
