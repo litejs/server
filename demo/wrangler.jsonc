@@ -1,0 +1,14 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "litejs-server-demo",
+	"main": "build/cloudflare.mjs",
+	"compatibility_date": "2025-09-27",
+	"assets": {
+		"directory": "./public",
+		// Serve the paths as written, the default strips `.html` with a 307
+		"html_handling": "none"
+	},
+	"observability": {
+		"enabled": true
+	}
+}

@@ -1,0 +1,10 @@
+
+# Vercel uploads a directory, everything is excluded and only what the deployment needs is re-included.
+# Vercel serves a public/ directory as static output,
+# anything not found there falls through the vercel.json rewrite to the function, `/` included.
+
+/*
+!/api
+!/public
+!/vercel.json
+

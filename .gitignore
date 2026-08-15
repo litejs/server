@@ -1,9 +1,18 @@
-/.env
+
+.env
 .env.json
-/.nyc_output
-/coverage
+.netlify
+.nyc_output
+.vercel
+.wrangler
+/demo/api
+/demo/bin
+/demo/build
+/demo/pkg
+/demo/public/sw.js
+/demo/public/test.js
 /test/server/build
 /wiki
-.wrangler
+coverage
 node_modules
 

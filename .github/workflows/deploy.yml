@@ -1,0 +1,55 @@
+name: Deploy
+on:
+  push:
+    branches: [ deploy ]
+  workflow_dispatch:
+jobs:
+  Deploy:
+    # Forks have no secrets and would fail
+    if: github.repository == 'litejs/server'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { id: cloudflare, name: Cloudflare, url: https://litejs-server-demo.litejs-com.workers.dev }
+        - { id: deno, name: Deno, url: https://litejs-server-demo.litejs.deno.net }
+        - { id: fastly, name: Fastly, url: https://nearly-equal-jennet.edgecompute.app }
+        - { id: netlify, name: Netlify, url: https://litejs-server-demo.netlify.app }
+        - { id: vercel, name: Vercel, url: https://litejs-server-demo.vercel.app }
+    env:
+      TEST_RUNTIME: ${{ matrix.name }}
+      TEST_URL: ${{ matrix.url }}
+    environment:
+      name: ${{ matrix.name }}
+      url: ${{ matrix.url }}
+    defaults:
+      run:
+        working-directory: demo
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
+    - if: matrix.id == 'deno'
+      uses: denoland/setup-deno@v2
+    - run: npm install --no-audit
+      working-directory: ${{ github.workspace }}
+    - run: npm install --no-audit
+    - run: echo "export var COMMIT = '${{ github.sha }}', RUNTIME = '${{ matrix.name }}'" > info.mjs
+    - run: npm run ${{ matrix.id }}:build
+    - run: npm run ${{ matrix.id }}:deploy
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ matrix.id == 'cloudflare' && secrets.CLOUDFLARE_TOKEN || '' }}
+        DENO_DEPLOY_TOKEN: ${{ matrix.id == 'deno' && secrets.DENO_TOKEN || '' }}
+        FASTLY_API_TOKEN: ${{ matrix.id == 'fastly' && secrets.FASTLY_TOKEN || '' }}
+        NETLIFY_AUTH_TOKEN: ${{ matrix.id == 'netlify' && secrets.NETLIFY_TOKEN || '' }}
+        VERCEL_TOKEN: ${{ matrix.id == 'vercel' && secrets.VERCEL_TOKEN || '' }}
+        WRANGLER_SEND_METRICS: "false"
+    - run: |
+        for i in $(seq 40); do
+          curl -sf "$TEST_URL/info" | grep -q "$GITHUB_SHA" && exit 0
+          sleep 3
+        done
+        echo "::error::$TEST_URL is not serving $GITHUB_SHA yet"
+        curl -s "$TEST_URL/info"
+        exit 1
+    - run: node test/smoke.mjs

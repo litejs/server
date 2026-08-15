@@ -1,0 +1,19 @@
+
+authors = ["lauri@rooden.ee"]
+description = "LiteJS Server Demo"
+language = "javascript"
+manifest_version = 3
+name = "litejs-demo"
+service_id = "qXxrUhU0e2LIxZG3tqLgmC"
+
+[scripts]
+	build = "npm run fastly:build"
+
+[setup.kv_stores]
+	[setup.kv_stores.litejs_server_demo]
+	description = "LiteJS Server Demo"
+
+[local_server]
+	[local_server.kv_stores]
+	litejs_server_demo = { file = "test/kv.json", format = "json" }
+
