@@ -109,6 +109,13 @@ export function setupShutdown(servers: Server | Server[], opts?: { exitTime?: nu
 export function worker(app: Handler, env?: Env): (req: Request, env?: Env, ctx?: Ctx) => Promise<Response>
 
 //
+// Server() - one entrypoint per app, resolved by #env
+//
+
+export type FetchHandler = (req: Request, env?: Env, ctx?: Ctx) => Promise<Response>
+export function Server(app: Handler, dir?: string): FetchHandler | { fetch: FetchHandler } | Server | void
+
+//
 // lib/serve.mjs
 //
 

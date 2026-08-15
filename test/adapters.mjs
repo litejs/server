@@ -2,7 +2,7 @@
 import '@litejs/cli/test.js'
 import { App, loadEnv } from '../index.mjs'
 import { listen as listenNode } from '../lib/node.mjs'
-import { listen as listenSW, serveCache } from '../lib/service-worker.mjs'
+import { DurableObject, Server as ServerSW, listen as listenSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
 import * as bun from '../lib/bun.mjs'
 import * as deno from '../lib/deno.mjs'
 import https from 'node:https'
@@ -242,6 +242,38 @@ describe('{0} adapter', !skip && [
 	[ 'Bun', bun ],
 	[ 'Deno', deno ],
 ], (name, lib) => {
+	test('Server() listens on the loaded env and mounts the static root last', async (assert, mock) => {
+		var calls = []
+		, serve = (o, handler) => (calls.push({ ...o, fetch: o.fetch || handler }), { stop() {}, shutdown() {}, reload() {} })
+		mock.swap(globalThis, name, { serve })
+		mock.swap(console, 'log', () => {})
+		mock.swap(process, 'env', {})
+		mock.swap(process, 'on', () => {}) // setupShutdown must not touch the test runner
+
+		var app = App()
+		app.get('x', () => name)
+		var server = lib.Server(app, fixtures)
+
+		assert.equal(calls[0].port, 8080, 'PORT comes from loadEnv, not from the caller')
+		assert.equal(typeof server.close, 'function', 'hands back the listen() controller')
+
+		var routed = await calls[0].fetch(new Request('http://localhost/x'))
+		assert.equal(await routed.text(), name, 'the app own routes still win')
+
+		var asset = await calls[0].fetch(new Request('http://localhost/tls1.crt'))
+		assert.equal(asset.status, 200, 'the static root is served under them')
+
+		var miss = await calls[0].fetch(new Request('http://localhost/nope'))
+		assert.equal(miss.status, 404, 'a static miss is the 404')
+
+		// Without a directory nothing is mounted, so the app alone answers.
+		var bare = App()
+		bare.get('y', () => 'bare')
+		lib.Server(bare)
+		assert.equal(await (await calls[1].fetch(new Request('http://localhost/y'))).text(), 'bare')
+		assert.equal((await calls[1].fetch(new Request('http://localhost/tls1.crt'))).status, 404, 'no static root without a dir')
+	})
+
 	test('listen passes options to {0}.serve and returns a { name, close } controller', async (assert, mock) => {
 		// Capture each serve() call. Bun puts fetch in options.fetch and TLS in
 		// options.tls; Deno passes the handler as the 2nd arg and TLS at top level.
@@ -319,6 +351,29 @@ describe('{0} adapter', !skip && [
 
 describe('service-worker adapter', () => {
 	if (skip) return
+
+	test('throws not implemented', async assert => {
+		assert.throws(() => {
+			var instance = new DurableObject()
+		})
+	})
+
+	test('Server() registers the fetch event, ignoring any static root', async (assert, mock) => {
+		var app = App()
+		app.get('sw', () => 'sw-ok')
+
+		var handlers = {}
+		mock.swap(globalThis, 'addEventListener', (type, fn) => { handlers[type] = fn })
+		mock.swap(globalThis, 'skipWaiting', () => {})
+		mock.swap(globalThis, 'clients', { claim: () => 'claim-token' })
+
+		assert.equal(ServerSW(app, 'public'), undefined, 'there is no module shape to return')
+
+		var responded
+		handlers.fetch({ request: new Request('http://localhost/sw'), respondWith: (p) => { responded = p } })
+		assert.equal(await (await responded).text(), 'sw-ok', 'the app answers through the event')
+	})
+
 	test('listen wires install, activate and fetch to the worker', async (assert, mock) => {
 		var app = App()
 		app.get('sw', () => 'sw-ok')

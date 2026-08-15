@@ -1,6 +1,6 @@
 
 import app from './app.mjs'
-import { S3, worker } from '../../index.mjs'
+import { S3, Server } from '../../index.mjs'
 
 export { Counter } from './counter.mjs'
 
@@ -8,7 +8,7 @@ export { Counter } from './counter.mjs'
 // DiskDirectory service bound as ASSETS, mapping / to index.html.
 app.get('/{path*}', (req, env) => env.ASSETS.fetch(new URL('/' + (req.param.path || 'index.html'), req.origin)))
 
-var handler = worker(app)
+var { fetch: handler } = Server(app)
 
 export default {
 	fetch(req, env, ctx) {

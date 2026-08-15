@@ -27,8 +27,13 @@
     "#env": {
       "bun": "./lib/bun.mjs",
       "deno": "./lib/deno.mjs",
+      "fastly": "./lib/fastly.mjs",
+      "netlify": "./lib/netlify.mjs",
+      "vercel": "./lib/vercel.mjs",
       "node": "./lib/node.mjs",
-      "workerd": "./lib/cloudflare.mjs"
+      "workerd": "./lib/workerd.mjs",
+      "browser": "./lib/browser.mjs",
+      "default": "./lib/default.mjs"
     },
     "#sqlite": {
       "bun": "bun:sqlite",
