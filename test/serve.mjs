@@ -43,6 +43,12 @@ describe('serveStatic', () => {
 		assert.end()
 	})
 
+	test('no baseDir serves from the working directory', async (assert) => {
+		var res = await serveStatic().fetch(new Request('http://localhost/package.json'))
+		assert.equal(res.status, 200, 'defaults the root to cwd')
+		assert.equal(res.headers.get('content-type'), 'application/json')
+	})
+
 	test('200 - {0}fetch index.html on root', [
 		[ 'index.html on root', 'http://localhost/', '<h1>Home</h1>', 'text/html; charset=utf-8' ],
 		[ 'file', 'http://localhost/hello.txt', 'hello', 'text/plain; charset=utf-8' ],

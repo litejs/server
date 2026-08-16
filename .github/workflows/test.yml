@@ -53,6 +53,23 @@ jobs:
     - uses: actions/setup-node@v6
     - uses: oven-sh/setup-bun@v2
     - uses: denoland/setup-deno@v2
+    - uses: actions/cache@v6
+      id: txiki
+      with:
+        path: ~/txiki
+        key: txiki-59eab487-${{ runner.os }}
+    - name: Build txiki
+      if: steps.txiki.outputs.cache-hit != 'true'
+      run: |
+        sudo apt-get update && sudo apt-get install -y libffi-dev
+        git clone --filter=blob:none https://github.com/saghul/txiki.js /tmp/txiki
+        git -C /tmp/txiki checkout 59eab48750a7170c6e4ec03752e89a330dc0882e
+        git -C /tmp/txiki submodule update --init --recursive
+        make -C /tmp/txiki
+        mkdir -p ~/txiki/bin && cp /tmp/txiki/build/tjs ~/txiki/bin/
+    - name: Add txiki to PATH
+      run: echo "$HOME/txiki/bin" >> "$GITHUB_PATH"
+    - run: tjs --version
     - run: npm install --no-audit
     - run: npm install --global wrangler
     - run: npm run test:e2e

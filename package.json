@@ -31,12 +31,22 @@
       "netlify": "./lib/netlify.mjs",
       "vercel": "./lib/vercel.mjs",
       "node": "./lib/node.mjs",
+      "txiki": "./lib/txiki.mjs",
       "workerd": "./lib/workerd.mjs",
       "browser": "./lib/browser.mjs",
       "default": "./lib/default.mjs"
     },
+    "#fs": {
+      "txiki": "./lib/fs-txiki.mjs",
+      "default": "./lib/fs-node.mjs"
+    },
+    "#hash": {
+      "txiki": "./lib/hash-txiki.mjs",
+      "default": "./lib/hash-node.mjs"
+    },
     "#sqlite": {
       "bun": "bun:sqlite",
+      "txiki": "./lib/sqlite-txiki.mjs",
       "default": "./lib/sqlite.mjs"
     }
   },

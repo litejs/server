@@ -34,6 +34,7 @@ describe('e2e {0} ' + base, [
 	[ 'node', process.execPath, 'run:node', 10000 ],
 	[ 'bun', 'bun', 'run:bun', 10000 ],
 	[ 'deno', 'deno', 'run:deno', 10000 ],
+	[ 'txiki', 'tjs', 'run:txiki', 10000 ],
 	[ 'workerd', cwd + '/node_modules/.bin/workerd', 'run:workerd', 20000 ],
 	[ 'wrangler', 'wrangler', 'run:wrangler', 60000 ],
 ], (name, cmd, script, bootTime) => {
