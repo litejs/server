@@ -161,6 +161,18 @@ describe('app', () => {
 		assert.equal(result, '/path/42', 'req.path inside sub is prefix-stripped')
 	})
 
+	test('mount at root preserves the leading slash', async (assert) => {
+		var sub = App()
+		sub.get('', req => req.path)
+		sub.get('path/{id+}', req => req.path)
+
+		var app = App()
+		app.mount('', sub)
+
+		assert.equal(await app(createReq('/', 'GET')), '/')
+		assert.equal(await app(createReq('/path/42', 'GET')), '/path/42')
+	})
+
 	test('req.route reflects deepest matched pattern through mounts', async (assert) => {
 		var inner = App()
 		inner.get('info/{id+}', (req) => req.route)
