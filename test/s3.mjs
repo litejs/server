@@ -168,6 +168,23 @@ describe('s3.mjs', () => {
 
 	})
 
+	test('high-level {0} rejects HTTP errors', [
+		['get',    s3 => s3.get('key')],
+		['head',   s3 => s3.head('key')],
+		['put',    s3 => s3.put('key', 'value')],
+		['delete', s3 => s3.delete('key')],
+		['list',   s3 => s3.list()],
+	], async (method, call, assert) => {
+		var response
+		, s3 = mock(() => response = new Response('Unavailable', { status: 503 }))
+		, err = await call(s3).then(() => null, e => e)
+		assert.ok(err instanceof Error)
+		assert.equal(err.message, 'S3 request failed: 503')
+		assert.equal(err.code, 503)
+		assert.equal(err.status, 503)
+		assert.strictEqual(err.response, response)
+	})
+
 	test('delete single key', async (assert) => {
 		var deleted = []
 		var s3 = mock(function(url, opts) {
@@ -433,10 +450,10 @@ describe('s3.mjs', () => {
 			assert.equal(opts.method, 'POST')
 			assert.ok(url.indexOf('/test-bucket/big.bin?uploads') > -1)
 			assert.ok(opts.headers.authorization)
-			return new Response('')
+			return new Response('', { status: 503 })
 		})
 		var res = await s3.request('POST', 'big.bin', null, 'uploads')
-		assert.equal(res.status, 200)
+		assert.equal(res.status, 503, 'raw requests leave status handling to the caller')
 	})
 
 	test('custom endpoint and region', async (assert) => {
