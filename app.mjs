@@ -3,7 +3,9 @@ import { isFn } from './util.mjs'
 
 
 var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
-, routeEsc = s => encodeURI(s).replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
+, routeEsc = s => encodeURI(s)
+	.replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
+	.replace(/%[\dA-F]{2}/g, val => val.replace(/[A-F]/g, char => '[' + char + char.toLowerCase() + ']'))
 , App = opts => {
 	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, keys = Object.keys(methods)

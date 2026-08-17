@@ -200,6 +200,7 @@ describe('worker integration', () => {
 	test('encoding {i}', [
 		[ '/hi', ['/hi', '/hi', {}] ],
 		[ '/men%C3%BC', ['/menü', '/men%C3%BC', {}] ],
+		[ '/men%c3%bc', ['/menü', '/men%c3%bc', {}] ],
 		[ '/menu/caf%C3%A9', ['/menu/café', '/caf%C3%A9', { order: 'café' }] ],
 		[ '/menu/a%2Fb', ['/menu/a%2Fb', '/a%2Fb', { order: 'a/b' }] ],
 		[ '/menu/a%252Fb', ['/menu/a%2Fb', '/a%252Fb', { order: 'a%2Fb' }] ],
