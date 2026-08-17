@@ -12,6 +12,7 @@ describe('app', () => {
 
 	test('routing - HTTP methods', [
 		['GET', 'get'],
+		['HEAD', 'head'],
 		['POST', 'post'],
 		['PUT', 'put'],
 		['PATCH', 'patch'],
@@ -26,7 +27,7 @@ describe('app', () => {
 	test('all() registers handler for every method', async (assert) => {
 		var app = App()
 		app.all('ping', () => 'pong')
-		for (var method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
+		for (var method of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']) {
 			assert.equal(await app(createReq('/ping', method)), 'pong', method + ' hits all() handler')
 		}
 	})
@@ -36,7 +37,7 @@ describe('app', () => {
 		var req = createReq('/test', 'CONNECT')
 		var result = await app(req)
 		assert.equal(result, 405)
-		assert.equal(req.resHeaders.Allow, 'DELETE, GET, PATCH, POST, PUT')
+		assert.equal(req.resHeaders.Allow, 'DELETE, GET, HEAD, PATCH, POST, PUT')
 	})
 
 	test('HEAD is routed to the GET handler', async (assert) => {
@@ -44,6 +45,17 @@ describe('app', () => {
 		app.get('test', () => 'GET response')
 		var result = await app(createReq('/test', 'HEAD'))
 		assert.equal(result, 'GET response')
+	})
+
+	test('explicit HEAD route overrides the GET handler', async (assert) => {
+		var app = App()
+		, calls = 0
+		app.use(() => { calls++ })
+		app.get('test', () => 'GET response')
+		app.head('test', () => 'HEAD response')
+		var result = await app(createReq('/test', 'HEAD'))
+		assert.equal(result, 'HEAD response')
+		assert.equal(calls, 1)
 	})
 
 	test('middleware and route parameters', async (assert) => {

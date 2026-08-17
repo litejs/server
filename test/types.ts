@@ -11,6 +11,7 @@ import {
 	R2Object,
 	S3,
 	Server,
+	ServerRequest,
 	awsVerify,
 	b64Url,
 	dedupe,
@@ -33,12 +34,14 @@ type Expect<T extends true> = T
 
 const app = App()
 app.get("users/{id}", req => ({ id: req.param.id }))
-app.get("files/{path*}", req => req.param.path)
+	.head("users/{id}", req => 204)
+	.get("files/{path*}", req => req.param.path)
 app.post("users", async (req, env, ctx) => (ctx.waitUntil(Promise.resolve()), 201))
 app.all("health", "OK")
 app.use(req => { req.resHeaders["x-served-by"] = "litejs" })
 app.mount("api", App())
 app.get("cached", dedupe(async req => req.path))
+const routeMatch: RegExpExecArray | "" | null = app.routers.GET.match({} as ServerRequest)
 
 const db = new DB(":memory:")
 const kv = KV(db, "kv")
@@ -109,3 +112,4 @@ void res
 void num
 void encoded
 void digest
+void routeMatch

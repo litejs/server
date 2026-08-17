@@ -66,6 +66,7 @@ export interface AppOptions extends RouterOptions {
 
 export interface RouterInstance {
 	routes: unknown[]
+	match(req: ServerRequest): RegExpExecArray | "" | null
 	add(route: string, handler: RouteHandler, _raw?: string): this
 	use(...fns: Handler[]): void
 	handle(req: ServerRequest, env: Env, ctx: Ctx): Promise<HandlerResult>
@@ -75,11 +76,12 @@ export interface RouterInstance {
 export interface AppInstance {
 	(req: ServerRequest, env: Env, ctx: Ctx): Promise<HandlerResult>
 	routers: Record<string, RouterInstance>
-	del(route: string, handler: RouteHandler, _raw?: string): RouterInstance
-	get(route: string, handler: RouteHandler, _raw?: string): RouterInstance
-	patch(route: string, handler: RouteHandler, _raw?: string): RouterInstance
-	post(route: string, handler: RouteHandler, _raw?: string): RouterInstance
-	put(route: string, handler: RouteHandler, _raw?: string): RouterInstance
+	del(route: string, handler: RouteHandler, _raw?: string): AppInstance
+	get(route: string, handler: RouteHandler, _raw?: string): AppInstance
+	head(route: string, handler: RouteHandler, _raw?: string): AppInstance
+	patch(route: string, handler: RouteHandler, _raw?: string): AppInstance
+	post(route: string, handler: RouteHandler, _raw?: string): AppInstance
+	put(route: string, handler: RouteHandler, _raw?: string): AppInstance
 	all(route: string, handler: RouteHandler, _raw?: string): AppInstance
 	mount(path: string, sub: Handler): AppInstance
 	use(...fns: Handler[]): AppInstance

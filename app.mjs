@@ -5,10 +5,10 @@ import { isFn } from './util.mjs'
 var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 , routeEsc = s => encodeURI(s).replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
 , App = opts => {
-	var methods = { DELETE: 'del', GET: 'get', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
+	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, keys = Object.keys(methods)
 	, notAllowed = opts?.notAllowed || (req => ((req.resHeaders ??= {}).Allow = keys.join(', '), 405))
-	, app = (req, env, ctx) => (routers[req.method === 'HEAD' ? 'GET' : req.method]?.handle || notAllowed)(req, env, ctx)
+	, app = (req, env, ctx) => ((req.method === 'HEAD' && !routers.HEAD?.match(req) ? routers.GET : routers[req.method])?.handle || notAllowed)(req, env, ctx)
 	, each = fn => (keys.forEach(method => fn(routers[method], method)), app)
 	, routers = app.routers = Object.create(null)
 
@@ -32,10 +32,12 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	, reStr = ''
 	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+\\/)*)', ...opts?.extensions }
 	, groups = 1
+	, match = req => req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
 	, routes = []
 
 	return {
 		routes,
+		match,
 		add(route, handler, _raw) {
 			var endSlot = routes.push(groups++, re = 0, route) - 2
 			reStr += (reStr ? '|(' : '(') + (_raw || route.replace(routeRe, (_, expr, ext, toEsc) =>
@@ -49,17 +51,17 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 		},
 		async handle(req, env, ctx) {
 			var end, m, pos = 0, len = routes.length, param = req.param ??= {}
-			, match = req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
+			, matched = match(req)
 			// Handlers and middleware throw on error; the worker owns error -> response.
-			if (match) for (; pos < len; pos = end) {
+			if (matched) for (; pos < len; pos = end) {
 				end = routes[pos + 1]
 				if ((m = routes[pos++]) < 1) {
 					// Middleware: [0, end, ...fns]
 					for (; ++pos < end; ) if ((m = await routes[pos](req, env, ctx))) return m
-				} else if (match[m] != null) {
+				} else if (matched[m] != null) {
 					// Matched route: [group, end, routeStr, ...paramNames, handler]
 					req.route = routes[++pos]
-					for (end--; ++pos < end; ) param[routes[pos]] = decodeURIComponent(match[++m])
+					for (end--; ++pos < end; ) param[routes[pos]] = decodeURIComponent(matched[++m])
 					m = routes[pos]
 					return isFn(m) ? m(req, env, ctx) : m
 				}
