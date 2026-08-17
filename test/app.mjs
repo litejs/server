@@ -124,7 +124,7 @@ describe('app', () => {
 
 		var app = App()
 		app.get('', () => 'home')
-		app.mount('hi', sub)
+		assert.strictEqual(app.mount('hi', sub), app, 'mount returns the app for chaining')
 		app.get('hih', 'app hih')
 
 		var result = await app(createReq('/', 'GET'))

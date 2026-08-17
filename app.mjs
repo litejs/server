@@ -17,7 +17,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	app.all = (route, handler, _raw) => each(r => r.add(route, handler, _raw))
 	app.mount = (path, sub) => {
 		var encLen = encodeURI(path).length + 1
-		app.all(
+		return app.all(
 			path,
 			(req, env, ctx) => (req.mount = path, req.path = req.path.slice(encLen) || '/', sub(req, env, ctx)),
 			routeEsc(path) + '(?:\\/.*|)'
