@@ -1,7 +1,6 @@
 
 import '@litejs/cli/test.js'
 import { App } from '../index.mjs'
-import { listen as listenNode } from '../lib/node.mjs'
 import { DurableObject, Server as ServerSW, listen as listenSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
 import https from 'node:https'
 import net from 'node:net'
@@ -10,7 +9,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-var fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
+// Test with swapped globals only in Node, on real runtimes those are read-only.
+// Real Bun/Deno behavior is tested by test/server/e2e.mjs.
+var skip = typeof Bun !== 'undefined' || typeof Deno !== 'undefined'
+, listenNode = skip ? null : async (...args) => (await import('../lib/node.mjs')).listen(...args)
+, fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 , sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 // Poll until the server answers, decoupled from any adapter-specific readiness event.
 , untilReady = async (get, last) => {
@@ -48,10 +51,6 @@ var fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 	})
 })
 
-// Test with swaped globals only in Node, on real runtime those are read-only.
-// Real Bun/Deno behavior is tested by test/server/e2e.mjs.
-var skip = typeof Bun !== 'undefined' || typeof Deno !== 'undefined'
-
 describe('node adapter', !skip && (() => {
 	test('serves GET, POST, HEAD and empty bodies over HTTP', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
@@ -62,7 +61,7 @@ describe('node adapter', !skip && (() => {
 
 		var port = 18723
 		, base = 'http://127.0.0.1:' + port
-		, server = listenNode(app, { PORT: port, HOSTNAME: '127.0.0.1', BIND_ADDR: '127.0.0.1' })
+		, server = await listenNode(app, { PORT: port, HOSTNAME: '127.0.0.1', BIND_ADDR: '127.0.0.1' })
 		try {
 			var get = await untilReady(() => fetch(base + '/hi'))
 			assert.equal(get.status, 200)
@@ -91,7 +90,7 @@ describe('node adapter', !skip && (() => {
 		mock.swap(console, 'log', () => {})
 		// Omit HOSTNAME and BIND_ADDR to exercise their defaults.
 		var base = 'http://127.0.0.1:18724'
-		, server = listenNode(App(), { PORT: 18724 })
+		, server = await listenNode(App(), { PORT: 18724 })
 		await untilReady(() => fetch(base))
 		assert.equal(typeof server.close, 'function')
 		server.reload() // without a TLS listener reload is a no-op
@@ -104,7 +103,7 @@ describe('node adapter', !skip && (() => {
 		, origin = 'http://127.0.0.1:' + port
 		// Every target below is unrouted, so notFound reports what the adapter built.
 		, app = App({ notFound: req => req.origin + ' ' + req.path })
-		, server = listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		, server = await listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
 		try {
 			await untilReady(() => fetch(origin))
 
@@ -158,7 +157,7 @@ describe('node adapter', !skip && (() => {
 		}), { headers: { 'content-length': '999' } }))
 		app.get('hi', () => 'world')
 
-		var server = listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		var server = await listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
 		try {
 			await untilReady(() => fetch(base + '/hi'))
 			// Headers are already sent, so the client can only see a cut-off body.
@@ -187,7 +186,7 @@ describe('node adapter', !skip && (() => {
 		copyFileSync(join(fixtures, 'tls1.key'), key)
 		copyFileSync(join(fixtures, 'tls1.crt'), cert)
 
-		var server = listenNode(app, { HTTPS_KEY: key, HTTPS_CERT: cert, HTTPS_PORT: port, BIND_ADDR: '127.0.0.1' })
+		var server = await listenNode(app, { HTTPS_KEY: key, HTTPS_CERT: cert, HTTPS_PORT: port, BIND_ADDR: '127.0.0.1' })
 		try {
 			var r1 = await untilReady(() => httpsGet(port, '/hi'))
 			assert.equal(r1.status, 200)
@@ -214,7 +213,7 @@ describe('node adapter', !skip && (() => {
 
 		var httpsPort = 18732
 		, httpPort = 18733
-		, server = listenNode(app, {
+		, server = await listenNode(app, {
 			HTTPS_KEY: join(fixtures, 'tls1.key'),
 			HTTPS_CERT: join(fixtures, 'tls1.crt'),
 			HTTPS_PORT: httpsPort,
