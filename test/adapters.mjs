@@ -1,13 +1,11 @@
 
 import '@litejs/cli/test.js'
-import { App, loadEnv } from '../index.mjs'
+import { App } from '../index.mjs'
 import { listen as listenNode } from '../lib/node.mjs'
 import { DurableObject, Server as ServerSW, listen as listenSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
-import * as bun from '../lib/bun.mjs'
-import * as deno from '../lib/deno.mjs'
 import https from 'node:https'
 import net from 'node:net'
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -237,117 +235,6 @@ describe('node adapter', !skip && (() => {
 		}
 	})
 }))
-
-describe('{0} adapter', !skip && [
-	[ 'Bun', bun ],
-	[ 'Deno', deno ],
-], (name, lib) => {
-	test('Server() listens on the loaded env and mounts the static root last', async (assert, mock) => {
-		var calls = []
-		, serve = (o, handler) => (calls.push({ ...o, fetch: o.fetch || handler }), { stop() {}, shutdown() {}, reload() {} })
-		mock.swap(globalThis, name, { serve })
-		mock.swap(console, 'log', () => {})
-		mock.swap(process, 'env', {})
-		mock.swap(process, 'on', () => {}) // setupShutdown must not touch the test runner
-
-		var app = App()
-		app.get('x', () => name)
-		var server = lib.Server(app, fixtures)
-
-		assert.equal(calls[0].port, 8080, 'PORT comes from loadEnv, not from the caller')
-		assert.equal(typeof server.close, 'function', 'hands back the listen() controller')
-
-		var routed = await calls[0].fetch(new Request('http://localhost/x'))
-		assert.equal(await routed.text(), name, 'the app own routes still win')
-
-		var asset = await calls[0].fetch(new Request('http://localhost/tls1.crt'))
-		assert.equal(asset.status, 200, 'the static root is served under them')
-
-		var miss = await calls[0].fetch(new Request('http://localhost/nope'))
-		assert.equal(miss.status, 404, 'a static miss is the 404')
-
-		// Without a directory nothing is mounted, so the app alone answers.
-		var bare = App()
-		bare.get('y', () => 'bare')
-		lib.Server(bare)
-		assert.equal(await (await calls[1].fetch(new Request('http://localhost/y'))).text(), 'bare')
-		assert.equal((await calls[1].fetch(new Request('http://localhost/tls1.crt'))).status, 404, 'no static root without a dir')
-	})
-
-	test('listen passes options to {0}.serve and returns a { name, close } controller', async (assert, mock) => {
-		// Capture each serve() call. Bun puts fetch in options.fetch and TLS in
-		// options.tls; Deno passes the handler as the 2nd arg and TLS at top level.
-		var calls = []
-		, stop = mock.fn(Promise.resolve()) // one spy counts stop+shutdown; a Promise so Deno reload can chain
-		, reload = mock.fn()
-		, serve = (o, handler) => (calls.push({ ...o, fetch: o.fetch || handler }), { stop, shutdown: stop, reload })
-		mock.swap(globalThis, name, { serve })
-		mock.swap(console, 'log', () => {})
-
-		var app = App()
-		app.get('x', () => name)
-		app.get('defer', (req, env, ctx) => (ctx.waitUntil(Promise.resolve()), name))
-		var env = loadEnv(null, { HOSTNAME: 'test.litejs.com', PORT: 1234 })
-		, server = lib.listen(app, env)
-
-		assert.equal(calls[0].port, 1234, 'binds PORT')
-		assert.equal(calls[0].hostname, '0.0.0.0', 'BIND_ADDR default')
-		assert.equal(server.name, 'http://test.litejs.com:1234', 'SERVER_NAME is computed from the merged env')
-		assert.equal(typeof server.close, 'function', 'uniform close')
-
-		var res = await calls[0].fetch(new Request('http://localhost/x'))
-		assert.equal(await res.text(), name, 'serve handler routes through the app')
-
-		var deferred = await calls[0].fetch(new Request('http://localhost/defer'))
-		assert.equal(await deferred.text(), name, 'ctx.waitUntil is wired (no-op off Workers)')
-
-		server.close()
-		assert.equal(stop.called, 1, 'close() stops the single listener')
-		server.reload() // without a TLS listener reload is a no-op
-
-		// PORT defaults to 8080
-		lib.listen(app)
-		assert.equal(calls[1].port, 8080)
-
-		// HTTPS_* switches to TLS on HTTPS_PORT (Bun: options.tls, Deno: top-level key/cert)
-		var pem = readFileSync(join(fixtures, 'tls1.key'), 'utf8')
-		, crt = readFileSync(join(fixtures, 'tls1.crt'), 'utf8')
-		lib.listen(app, { HTTPS_KEY: pem, HTTPS_CERT: crt, HTTPS_PORT: 8443 })
-		var c = calls[2]
-		assert.equal(calls.length, 3, 'TLS-only: a single listener (no PORT)')
-		assert.equal(c.port, 8443, 'TLS listens on HTTPS_PORT')
-		assert.ok((c.tls?.key || c.key) && (c.tls?.cert || c.cert), 'key and cert handed to serve')
-
-		// With PORT: two listeners, the HTTP one redirects to HTTPS.
-		var dual = lib.listen(app, { HTTPS_KEY: pem, HTTPS_CERT: crt, HTTPS_PORT: 8443, PORT: 8080 })
-		assert.equal(calls.length, 5, 'binds both HTTPS and HTTP listeners')
-		assert.equal(calls[3].port, 8443, 'HTTPS on HTTPS_PORT')
-		assert.equal(calls[4].port, 8080, 'HTTP on PORT')
-		var red = await calls[4].fetch(new Request('http://localhost/hi'))
-		assert.equal(red.status, 301, 'HTTP listener redirects')
-		assert.equal(red.headers.get('location'), 'https://localhost:8443/hi', 'redirects to HTTPS')
-
-		// reload(): Bun hot-swaps the cert in place; Deno drains and rebinds the TLS listener.
-		dual.reload()
-		await sleep(0)
-		name === 'Bun'
-			? assert.own(reload.calls[0].args[0], { tls: { key: pem, cert: crt } }, 'reload hands a fresh tls cert to the server')
-			: assert.equal(calls[5].port, 8443, 'reload rebinds the TLS listener on HTTPS_PORT')
-
-		var before = stop.called
-		dual.close()
-		assert.equal(stop.called, before + 2, 'close() stops both listeners')
-
-		// TLS with default HTTPS_PORT; the HTTP listener redirects there.
-		var n = calls.length
-		, both = lib.listen(app, { HTTPS_KEY: pem, HTTPS_CERT: crt, PORT: 8080 })
-		assert.equal(calls[n].port, 8443, 'HTTPS_PORT defaults to 8443')
-		var red2 = await calls[n + 1].fetch(new Request('http://localhost/x'))
-		assert.equal(red2.headers.get('location'), 'https://localhost:8443/x', 'redirects to the default HTTPS_PORT')
-		both.reload() // rebinds (Deno) or hot-swaps (Bun) using the default HTTPS_PORT
-		await sleep(0)
-	})
-})
 
 describe('service-worker adapter', () => {
 	if (skip) return

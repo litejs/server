@@ -24,7 +24,7 @@
     "node": ">=22.5"
   },
   "imports": {
-    "#env": {
+    "#runtime": {
       "bun": "./lib/bun.mjs",
       "deno": "./lib/deno.mjs",
       "fastly": "./lib/fastly.mjs",
@@ -35,19 +35,6 @@
       "workerd": "./lib/workerd.mjs",
       "browser": "./lib/browser.mjs",
       "default": "./lib/default.mjs"
-    },
-    "#fs": {
-      "txiki": "./lib/fs-txiki.mjs",
-      "default": "./lib/fs-node.mjs"
-    },
-    "#hash": {
-      "txiki": "./lib/hash-txiki.mjs",
-      "default": "./lib/hash-node.mjs"
-    },
-    "#sqlite": {
-      "bun": "bun:sqlite",
-      "txiki": "./lib/sqlite-txiki.mjs",
-      "default": "./lib/sqlite.mjs"
     }
   },
   "files": [

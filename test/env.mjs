@@ -3,7 +3,7 @@ import '@litejs/cli/test.js'
 import { writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { httpsRedirect, readFiles, loadEnv, setupShutdown } from '../index.mjs'
+import { App, httpsRedirect, readCert, readFiles, loadEnv, localServer, setupShutdown, worker } from '../index.mjs'
 
 var stubbable = typeof Bun === 'undefined' && typeof Deno === 'undefined'
 
@@ -63,6 +63,24 @@ describe('readFiles', () => {
 	})
 })
 
+describe('readCert', () => {
+	test('reads a path from disk and takes inline PEM as given', (assert) => {
+		var key = join(import.meta.dirname, 'fixtures', 'tls1.key')
+		, cert = join(import.meta.dirname, 'fixtures', 'tls1.crt')
+		, fromFile = readCert({ HTTPS_KEY: key, HTTPS_CERT: cert })
+		assert.ok(fromFile.key.startsWith('-----BEGIN'), 'a path is read from disk')
+		assert.ok(fromFile.cert.startsWith('-----BEGIN'))
+
+		// A value that already looks like PEM is passed through untouched.
+		var inline = readCert({ HTTPS_KEY: fromFile.key, HTTPS_CERT: fromFile.cert })
+		assert.equal(inline.key, fromFile.key, 'inline key is used as given')
+		assert.equal(inline.cert, fromFile.cert, 'inline cert is used as given')
+
+		assert.equal(readCert({ HTTPS_KEY: key }), undefined, 'a key without a cert is no TLS')
+		assert.end()
+	})
+})
+
 describe('httpsRedirect', () => {
 	test('301-redirects to https on HTTPS_PORT {0}', [
 		[443, 'https://example.com/x?q=1'], // default https port is dropped from the url
@@ -73,6 +91,50 @@ describe('httpsRedirect', () => {
 		assert.equal(res.status, 301)
 		assert.equal(res.headers.get('location'), location)
 		assert.end()
+	})
+})
+
+describe('worker', () => {
+	test('hands the handler a ctx whose waitUntil is a no-op off Workers', async assert => {
+		var app = App()
+		app.get('defer', (req, env, ctx) => (ctx.waitUntil(Promise.resolve()), 'deferred'))
+		var res = await worker(app)(new Request('http://localhost/defer'))
+		assert.equal(await res.text(), 'deferred')
+	})
+})
+
+describe('localServer', () => {
+	test('mounts the static root last and returns the listen() controller', async (assert, mock) => {
+		mock.swap(console, 'log', () => {})
+		mock.swap(process, 'env', {})
+		mock.swap(process, 'on', () => {}) // setupShutdown must not touch the test runner
+
+		// Every runtime hands localServer its own listen(); this one only records.
+		var calls = []
+		, listen = (app, env) => (calls.push({ env, fetch: worker(app, env) }), { name: env.SERVER_NAME, close() {} })
+		, Server = localServer(listen)
+		, app = App()
+		app.get('x', () => 'own route')
+
+		var server = Server(app, join(import.meta.dirname, 'fixtures'))
+		assert.equal(calls[0].env.PORT, 8080, 'PORT comes from loadEnv, not from the caller')
+		assert.equal(typeof server.close, 'function', 'hands back the listen() controller')
+
+		var routed = await calls[0].fetch(new Request('http://localhost/x'))
+		assert.equal(await routed.text(), 'own route', 'the app own routes still win')
+
+		var asset = await calls[0].fetch(new Request('http://localhost/tls1.crt'))
+		assert.equal(asset.status, 200, 'the static root is served under them')
+
+		var miss = await calls[0].fetch(new Request('http://localhost/nope'))
+		assert.equal(miss.status, 404, 'a static miss is the 404')
+
+		// Without a directory nothing is mounted, so the app alone answers.
+		var bare = App()
+		bare.get('y', () => 'bare')
+		Server(bare)
+		assert.equal(await (await calls[1].fetch(new Request('http://localhost/y'))).text(), 'bare')
+		assert.equal((await calls[1].fetch(new Request('http://localhost/tls1.crt'))).status, 404, 'no static root without a dir')
 	})
 })
 

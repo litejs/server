@@ -1,6 +1,8 @@
 
 import '@litejs/cli/test.js'
-import { serveRange, serveStatic } from '../lib/serve.mjs'
+import { serveRange } from '../lib/serve.mjs'
+// serveStatic is built per runtime from staticFrom(); this is the node one.
+import { serveStatic } from '../lib/env.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'

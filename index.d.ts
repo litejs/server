@@ -1,7 +1,5 @@
 
 // Type definitions for @litejs/server
-// Describes the Node surface of index.mjs; on workerd only
-// DurableObject and worker resolve from #env.
 
 //
 // util.mjs
@@ -109,7 +107,7 @@ export function setupShutdown(servers: Server | Server[], opts?: { exitTime?: nu
 export function worker(app: Handler, env?: Env): (req: Request, env?: Env, ctx?: Ctx) => Promise<Response>
 
 //
-// Server() - one entrypoint per app, resolved by #env
+// Server() - one entrypoint per app, resolved by #runtime
 //
 
 export type FetchHandler = (req: Request, env?: Env, ctx?: Ctx) => Promise<Response>
@@ -123,7 +121,19 @@ export function serveRange(req: Request, res: Response | Promise<Response>): Pro
 export function serveStatic(baseDir?: string, opts?: { defaultMime?: string }): { fetch(req: Request): Promise<Response> }
 
 //
-// #sqlite (node:sqlite DatabaseSync)
+// Platform primitives, each runtime's own, resolved from #runtime
+//
+
+export const sep: string
+export function body(file: string): ReadableStream | Promise<Uint8Array>
+export function cwd(): string
+export function remove(file: string): void
+export function resolve(...parts: string[]): string
+export function stat(file: string): Promise<{ isFile: boolean, size: number }>
+export function createHash(algorithm: string): { update(data: unknown): { digest(enc: string): string } }
+
+//
+// DB - node:sqlite DatabaseSync, bun:sqlite on Bun, tjs:sqlite on txiki
 //
 
 export interface DBStatement {

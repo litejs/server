@@ -1,6 +1,7 @@
 
 export * from './util.mjs'
-export * from '#env'
+export * from '#runtime'
+export * from './lib/shim-cloudflare.mjs'
 export { App, Router } from './app.mjs'
 export { dedupe } from './lib/dedupe.mjs'
 export { DO, migrate } from './lib/do.mjs'
