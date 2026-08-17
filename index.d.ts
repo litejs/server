@@ -228,7 +228,7 @@ export interface DurableObjectStorage extends DurableObjectKv {
 
 export interface DurableObjectState {
 	id: DurableObjectId
-	blockConcurrencyWhile<T>(fn: () => T | Promise<T>): T | Promise<T>
+	blockConcurrencyWhile<T>(fn: () => T | Promise<T>): Promise<T>
 	storage: DurableObjectStorage
 }
 
@@ -253,7 +253,6 @@ export function durableObject<T extends DurableObject>(
 	alarms?: Map<string, { time: number }>
 ): DurableObjectNamespace<T>
 
-export function evict(instances: Map<string, { active: boolean, db: DB }>): void
 export function durableAlarms(db: DB): Map<string, { time: number }>
 export function kvMap(db: DB, table: string | { name?: string }, preserveKeys?: string[] | null): Map<string, any>
 

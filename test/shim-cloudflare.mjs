@@ -3,7 +3,7 @@ import '@litejs/cli/test.js'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Cache, DB, D1, DurableObject, DO, KV, R2, durableAlarms, durableObject, evict, kvMap, migrate, parseCron, startCron, toUint } from '../index.mjs'
+import { Cache, DB, D1, DurableObject, DO, KV, R2, durableAlarms, durableObject, kvMap, migrate, parseCron, startCron, toUint } from '../index.mjs'
 
 
 describe('Cache', () => {
@@ -691,6 +691,103 @@ describe('DO', () => {
 		assert.equal(await stub.ctx.blockConcurrencyWhile(() => 'done'), 'done')
 	})
 
+	test('blockConcurrencyWhile delays calls until initialization completes', async (assert) => {
+		var release, events = []
+		class Blocking extends DurableObject {
+			constructor(ctx, env) {
+				super(ctx, env)
+				this.ready = false
+				ctx.blockConcurrencyWhile(async () => {
+					events.push('init:start')
+					await new Promise(resolve => { release = resolve })
+					this.ready = true
+					events.push('init:end')
+				})
+			}
+			read() {
+				events.push('read')
+				return this.ready
+			}
+		}
+
+		var stub = makeNS(Blocking).getByName('a')
+		, pending = stub.read()
+		assert.strictEqual(stub.constructor, Blocking, 'proxy preserves the local instance shape')
+		assert.type(pending.then, 'function', 'a call made while blocked is queued')
+		assert.equal(events, ['init:start'])
+		release()
+		assert.equal(await pending, true)
+		assert.equal(events, ['init:start', 'init:end', 'read'])
+	})
+
+	test('blockConcurrencyWhile failure resets the object', async (assert) => {
+		var constructions = 0
+		class Flaky extends DurableObject {
+			constructor(ctx, env) {
+				super(ctx, env)
+				this.instance = ++constructions
+				if (this.instance === 1) {
+					ctx.blockConcurrencyWhile(() => { throw Error('sync init failed') })
+					ctx.blockConcurrencyWhile(async () => { await null; throw Error('async init failed') })
+				}
+			}
+			read() { return this.instance }
+		}
+
+		var ns = makeNS(Flaky)
+		, failed = ns.getByName('a')
+		, error = await failed.read().then(() => null, e => e)
+		assert.ok(/init failed/.test(error.message))
+		assert.ok(await failed.read().then(() => false, () => true), 'failed stub stays failed')
+
+		var fresh = ns.getByName('a')
+		assert.notStrictEqual(fresh, failed, 'the next lookup constructs a fresh object')
+		assert.equal(fresh.read(), 2)
+
+		var closeError = await fresh.ctx.blockConcurrencyWhile(() => {
+			fresh.ctx.storage.deleteAll()
+			throw Error('failed after closing storage')
+		}).then(() => null, e => e)
+		assert.equal(closeError.message, 'failed after closing storage')
+	})
+
+	test('constructor failure closes activation with a pending block', async (assert) => {
+		var block, state
+		class Broken extends DurableObject {
+			constructor(ctx, env) {
+				super(ctx, env)
+				state = ctx
+				block = ctx.blockConcurrencyWhile(() => { throw Error('block failed') })
+				throw Error('constructor failed')
+			}
+		}
+
+		var ns = makeNS(Broken)
+		assert.throws(() => ns.getByName('a'), /constructor failed/)
+		assert.equal((await block.then(() => null, e => e)).message, 'block failed')
+		assert.throws(() => state.storage.get('x'), 'constructor failure closes storage')
+	})
+
+	test('blockConcurrencyWhile resets the object after 30 seconds', async (assert, mock) => {
+		var constructions = 0
+		class Stuck extends DurableObject {
+			constructor(ctx, env) {
+				super(ctx, env)
+				this.instance = ++constructions
+				if (this.instance === 1) ctx.blockConcurrencyWhile(() => new Promise(() => {}))
+			}
+			read() { return this.instance }
+		}
+
+		mock.time()
+		var ns = makeNS(Stuck)
+		, pending = ns.getByName('a').read().then(() => null, e => e)
+		mock.tick(30000)
+		var error = await pending
+		assert.equal(error.message, 'blockConcurrencyWhile timed out')
+		assert.equal(ns.getByName('a').read(), 2)
+	})
+
 	test('kv: get/put/delete + auto-JSON for objects', (assert) => {
 		var kv = makeNS(MyDO).getByName('a').ctx.storage
 		assert.equal(kv.get('x'), undefined)
@@ -736,16 +833,24 @@ describe('DO', () => {
 		assert.end()
 	})
 
-	test('evict closes instances not got since last sweep, keeps fresh ones', (assert) => {
-		var closed = []
-		var instances = new Map()
-		instances.set('idle',  { db: { close: () => closed.push('idle')  }, active: false })
-		instances.set('fresh', { db: { close: () => closed.push('fresh') }, active: true })
-		evict(instances)
-		assert.equal(closed, ['idle'])
-		assert.equal(instances.has('idle'),  false)
-		assert.equal(instances.has('fresh'), true)
-		assert.equal(instances.get('fresh').active, false, 'first probe arms eviction for next sweep')
+	test('evicts instances not got since last sweep and keeps fresh ones', (assert, mock) => {
+		var constructions = 0
+		class Evictable extends DurableObject {
+			constructor(ctx, env) {
+				super(ctx, env)
+				this.instance = ++constructions
+			}
+		}
+
+		mock.time()
+		var ns = makeNS(Evictable)
+		, idle = ns.getByName('idle')
+		, fresh = ns.getByName('fresh')
+		mock.tick(300000)
+		assert.strictEqual(ns.getByName('fresh'), fresh, 'a lookup keeps the activation fresh')
+		mock.tick(300000)
+		assert.notStrictEqual(ns.getByName('idle'), idle, 'an idle activation is replaced')
+		assert.strictEqual(ns.getByName('fresh'), fresh, 'a fresh activation is retained')
 		assert.end()
 	})
 
