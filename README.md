@@ -10,109 +10,127 @@ LiteJS Server &ndash; [![Coverage][1]][2] [![Size][3]][4] [![Buy Me A Tea][5]][6
 =============
 
 A small, zero-dependency HTTP application core that runs the same code across
-Bun, Cloudflare Workers, Deno, Node.js, and on browser Service Worker.
-
+local runtimes (Bun, Deno, Node.js, txiki.js),
+cloud providers (Cloudflare Workers, Deno Deploy, Netlify, Vercel),
+and browser service workers.
 
 ## Usage
 
 `npm install @litejs/server`
 
 ```javascript
-// app.mjs
-import { App } from "@litejs/server"
+// server.mjs
+import { App, Server } from "@litejs/server"
 
 const app = App()
 
-// Middlewares runs only if any route matches
+// Middleware runs only when a route matches
 app.use((req, env) => {
-	// return a response to stop further execution
+	// Return a response to stop further execution
 })
 
-// Route paths are written without leading and trailing '/'
-// Only single, first matching route get executed!
-app.get('hello/world', (req, env) => 'Hello MOON!')
-app.get('hello/{name}', (req, env) => 'Hello ' + req.param.name)
-app.get('bye/{name}', (req, env) => 'Bye ' + req.param.name)
-app.get('bye/moon', (req, env) => { /* Never executed as previous handler matches */ })
-app.get('teapot', (req) => (req.resStatus = 418, "no coffee"))
-app.get('notFound', () => 404) // Return a number to send status code
+// Write route paths without leading or trailing `/`
+// Only the first matching route is executed
+app.get("hello/world", (req, env) => "Hello MOON!")
+app.get("hello/{name}", (req, env) => "Hello " + req.param.name)
+app.get("bye/{name}", (req, env) => "Bye " + req.param.name)
+app.get("bye/moon", (req, env) => { /* Never executed because the previous handler matches */ })
+app.get("teapot", (req) => (req.resStatus = 418, "no coffee"))
+app.get("notFound", () => 404) // Return a number to send a status code
 
-// Group routes and mount under a prefix, also without leading and trailing '/'
+// Group routes and mount them under a prefix, also without leading or trailing `/`
 const subApp = App()
 .post("", (req, env) => {
-    // GET /api -> req.path == '/' and req.fullPath == '/api'
+    // POST /api -> req.path == "/" and req.fullPath == "/api"
     return { data: [] }
 })
 .post("echo", async (req, env) => {
-    // POST /api/echo -> req.path == '/echo' and req.fullPath == '/api/echo'
+    // POST /api/echo -> req.path == "/echo" and req.fullPath == "/api/echo"
     return await req.json()
 })
 
 app.mount("api", subApp)
 
-export default app
+// A common entry point that handles runtime differences.
+// On Cloudflare and Vercel, it returns `{ fetch }`; on Netlify, the handler itself;
+// on Node.js, Bun, Deno, and txiki.js, it starts the server.
+export default Server(app)
 ```
 
 Handlers receive `(req, env, ctx)` and may return
 a native `Response`,
 a number (status only),
 an object or array (serialized to JSON),
-or a body passed to new `Response`.
+or any value accepted as the body of a new `Response`.
 
-Set the status with `req.resStatus = 409`, extra headers with `req.resHeaders.allow = 'GET, PUT'`.
+Set the status with `req.resStatus = 409` and add headers with `req.resHeaders.allow = "GET, PUT"`.
 Thrown errors map to `err.code || 500`; 5xx bodies are kept generic.
 
 Requests include `param`, `path`, `fullPath`, `query`, `searchParams`, and `header(name)`.
-Routes match against `path`, the raw percent-encoded pathname;
+Routes match against `path`, the raw, percent-encoded pathname;
 `fullPath` and `param` values are decoded.
 
 ### Routes
 
  - `user/{username}` matches one path segment (no `/`)
  - `post/{id+}` matches one or more digits
- - `files/{rest*}.ext` matches all chars, greedy
+ - `files/{rest*}.ext` greedily matches all characters
  - `a/{dir/}{name}` matches zero or more slash-terminated directories
  - `pub/\{x}` matches the literal path `pub/{x}`
 
 
-## Adapters
+### Runtime environments
 
-The same `app` runs on every runtime.
-`@litejs/server` exports the matching adapter through conditional export,
-so the one file below runs unchanged on Node.js, Bun, and Deno.
+More complex setups require manually configured environments.
+For example, `env.KV` is provided natively on Cloudflare but must be configured for local runtimes.
 
-```javascript
-// run.mjs
-import {
-    DB, KV, listen, loadEnv, serveStatic, setupShutdown
-} from "@litejs/server"
-import app from "./app.mjs"
+Runtime-specific environments can be selected in several ways.
+One option is to use a separate entry file for each runtime.
+Another is to use conditional imports in `package.json`, allowing runtimes to share an entry point:
 
-const db = new DB("db.sqlite")
-const env = loadEnv(".env.json", {
-    ASSETS: serveStatic("public"),
-    // Inject Cloudflare style KV on top of sqlite
-    DEVICE: KV(db, "device"),
-})
-const server = listen(app, env)
-app.get("{path*}", env.ASSETS.fetch)
-
-// Attach SIGINT/SIGTERM/SIGHUP/uncaughtException
-setupShutdown([ server ])
+```json
+{
+  "imports": {
+    "#env": {
+      "workerd": "./env/workerd.mjs",
+      "default": "./env/local.mjs"
+    }
+  }
+}
 ```
 
-Run it with `node run.mjs`, `bun run.mjs`, or `deno run -A run.mjs`.
+Configure `ASSETS` and `KV` bindings in `wrangler.jsonc` for Cloudflare.
+On local runtimes, `serveStatic` provides `ASSETS`, while a SQLite-backed shim provides `KV`.
 
-### Runtimes
+```javascript
+// env/workerd.mjs
+export { env } from "cloudflare:workers"
+```
 
- - Node.js, Bun, Deno: import from `@litejs/server`; the runtime is detected automatically.
- - Cloudflare Workers: `import { worker } from "@litejs/server"`, then `export default { fetch: worker(app) }`.
- - Service Workers: `import { listen } from "@litejs/server"`.
+```javascript
+// env/local.mjs
+import { DB, KV, serveStatic } from "@litejs/server"
+var db = new DB(":memory:")
+, env = {
+	ASSETS: serveStatic("public"),
+	KV: KV(db, "kv"),
+}
+export { env }
+```
 
-On Node, Bun, and Deno `@litejs/server` also exports `serveStatic`, `loadEnv`,
-`setupShutdown`, and SQLite-backed `DB` (D1) and `KV` shims.
+The same server entry point runs on Cloudflare, Bun, Deno, Node.js, and txiki.js:
 
-Runnable examples are in [`test/server/`](test/server/).
+```javascript
+// server.mjs
+import { Server } from "@litejs/server"
+import { env } from "#env"
+import { app } from "./app.mjs"
+
+export default Server(app, env)
+```
+
+
+Runnable examples are in [`demo/`](demo/) and [`test/server/`](test/server/).
 
 > Copyright (c) 2026 Lauri Rooden &lt;lauri@rooden.ee&gt;  
 [MIT License](https://litejs.com/MIT-LICENSE.txt) |
