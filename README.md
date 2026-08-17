@@ -24,9 +24,11 @@ import { App, Server } from "@litejs/server"
 
 const app = App()
 
-// Middleware runs only when a route matches
+// Routes and middleware run in registration order
+// Only middleware registered before the matching route runs
+// Without a matching route, no middleware runs
 app.use((req, env) => {
-	// Return a response to stop further execution
+    // Return a truthy response to stop further execution
 })
 
 // Write route paths without leading or trailing `/`
