@@ -28,6 +28,15 @@ describe('worker adapter', () => {
 		assert.equal(called, 0, 'the handler is not run')
 	})
 
+	test('{0} is not redirected', [
+		[ '/a/b' ],
+		[ '/menu/a%2F%2Fb' ], // encoded slashes are a path segment, not a separator
+	], async (path, assert) => {
+		var res = await send(req => req.path, path)
+		assert.equal(res.status, 200)
+		assert.equal(await res.text(), path)
+	})
+
 	test('normalizes a handler result to a {1} Response with body {2}', [
 		[() => ({ a: 1 }), 200, '{"a":1}', 'application/json'], // an object is JSON
 		[() => [1, 2], 200, '[1,2]', 'application/json'], // an array is JSON too
