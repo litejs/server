@@ -474,6 +474,7 @@ describe('DO', () => {
 		assert.strictEqual(a, b, 'same instance cached')
 		assert.strictEqual(a.env, env)
 		assert.equal(a.ctx.id.name, 'room1')
+		assert.equal(a.ctx.waitUntil(Promise.resolve()), undefined)
 		assert.ok(a.ctx.storage.sql)
 		assert.end()
 	})
