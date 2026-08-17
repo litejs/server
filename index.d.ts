@@ -222,7 +222,7 @@ export interface DurableObjectStorage extends DurableObjectKv {
 	getAlarm(): number | null
 	setAlarm(time: number | Date): void
 	transactionSync<T>(fn: () => T): T
-	transaction<T>(fn: () => T): T
+	transaction<T>(fn: () => T | Promise<T>): Promise<T>
 	sql: SqlStorage
 }
 

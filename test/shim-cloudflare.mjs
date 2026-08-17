@@ -529,7 +529,7 @@ describe('DO', () => {
 		assert.end()
 	})
 
-	test('transaction commits / rolls back / works with await', async (assert) => {
+	test('transactions commit, roll back, await, and serialize', async (assert) => {
 		var stub = ns.getByName('a')
 		var sql = stub.ctx.storage.sql
 		sql.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)')
@@ -550,13 +550,45 @@ describe('DO', () => {
 		}), /fail/)
 		assert.equal(sql.exec('SELECT COUNT(*) AS n FROM items').one().n, 2)
 
-		// transaction() works with await
-		var done = await stub.ctx.storage.transaction(() => {
+		// transactionSync refuses a Promise and rolls back synchronous work.
+		assert.throws(() => stub.ctx.storage.transactionSync(async () => {
+			sql.exec('INSERT INTO items (name) VALUES (?)', 'Not committed')
+		}), /must be synchronous/)
+		assert.equal(sql.exec('SELECT COUNT(*) AS n FROM items').one().n, 2)
+
+		// transaction() keeps the transaction open across await.
+		var done = await stub.ctx.storage.transaction(async () => {
+			await null
 			sql.exec('INSERT INTO items (name) VALUES (?)', 'Dave')
 			return 'done'
 		})
 		assert.equal(done, 'done')
 		assert.equal(sql.exec('SELECT COUNT(*) AS n FROM items').one().n, 3)
+
+		// A rejection after await rolls back every write in the callback.
+		var err = await stub.ctx.storage.transaction(async () => {
+			sql.exec('INSERT INTO items (name) VALUES (?)', 'Eve')
+			await null
+			sql.exec('INSERT INTO items (name) VALUES (?)', 'Frank')
+			throw Error('async fail')
+		}).then(() => null, e => e)
+		assert.equal(err.message, 'async fail')
+		assert.equal(sql.exec('SELECT COUNT(*) AS n FROM items').one().n, 3)
+
+		// Concurrent transactions wait for the active transaction to settle.
+		var release, order = []
+		, first = stub.ctx.storage.transaction(async () => {
+			order.push('first:start')
+			await new Promise(resolve => { release = resolve })
+			order.push('first:end')
+		})
+		await null
+		var second = stub.ctx.storage.transaction(() => { order.push('second') })
+		await null
+		assert.equal(order, ['first:start'])
+		release()
+		await Promise.all([first, second])
+		assert.equal(order, ['first:start', 'first:end', 'second'])
 	})
 
 	test('alarm', (assert, mock) => {
