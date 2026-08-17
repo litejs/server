@@ -93,6 +93,16 @@ describe('app', () => {
 		assert.equal(result, 'options')
 	})
 
+	test('mount inherits custom methods from the sub-app', async (assert) => {
+		var sub = App({ method: { OPTIONS: 'options' } })
+		sub.options('', () => 'sub options')
+
+		var app = App()
+		app.mount('api', sub)
+
+		assert.equal(await app(createReq('/api', 'OPTIONS')), 'sub options')
+	})
+
 	test('missing route returns 404', async (assert) => {
 		var app = App()
 		app.get('known', () => 'ok')

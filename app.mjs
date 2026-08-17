@@ -10,15 +10,20 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, keys = Object.keys(methods)
 	, notAllowed = opts?.notAllowed || (req => ((req.resHeaders ??= {}).Allow = keys.join(', '), 405))
+	, addRouter = (router, method) => routers[method] || (
+		router = routers[method] = Router(opts),
+		methods[method] ? app[methods[method]] = router.add : keys.push(method)
+	)
 	, app = (req, env, ctx) => ((req.method === 'HEAD' && !routers.HEAD?.match(req) ? routers.GET : routers[req.method])?.handle || notAllowed)(req, env, ctx)
-	, each = fn => (keys.forEach(method => fn(routers[method], method)), app)
+	, each = app.each = fn => (keys.forEach(method => fn(routers[method], method)), app)
 	, routers = app.routers = Object.create(null)
 
-	each((_, method) => app[methods[method]] = (routers[method] = Router(opts)).add)
+	each(addRouter)
 
 	app.all = (route, handler, _raw) => each(r => r.add(route, handler, _raw))
 	app.mount = (path, sub) => {
 		var encLen = path ? encodeURI(path).length + 1 : 0
+		sub.each(addRouter)
 		return app.all(
 			path,
 			(req, env, ctx) => (req.mount = path, req.path = req.path.slice(encLen) || '/', sub(req, env, ctx)),
