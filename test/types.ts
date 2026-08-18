@@ -33,6 +33,8 @@ type Equal<A, B> =
 type Expect<T extends true> = T
 
 const app = App()
+const headOnly = App({ method: { GET: null } })
+headOnly.head("health", 204)
 app.get("users/{id}", req => ({ id: req.param.id }))
 	.head("users/{id}", req => 204)
 	.get("files/{path*}", req => req.param.path)

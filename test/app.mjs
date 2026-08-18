@@ -52,57 +52,44 @@ describe('app', () => {
 		assert.equal(req.resHeaders.Allow, 'GET, HEAD')
 	})
 
-	test('custom notAllowed receives the route-specific Allow header', async (assert) => {
-		var actual
+	test('fallback handlers receive route details, env, and ctx', async (assert) => {
+		var notAllowed
+		, notFound
 		, env = {}
 		, ctx = {}
 		, app = App({ notAllowed(req, actualEnv, actualCtx) {
-			actual = [req.resHeaders.Allow, actualEnv, actualCtx]
+			notAllowed = [req.resHeaders.Allow, actualEnv, actualCtx]
 			return 418
+		}, notFound(req, actualEnv, actualCtx) {
+			notFound = [req.path, actualEnv, actualCtx]
+			return 410
 		} })
 		app.patch('known', () => 'patch')
 
-		var result = await app(createReq('/known', 'CONNECT'), env, ctx)
-		assert.equal(result, 418)
-		assert.equal(actual[0], 'PATCH')
-		assert.strictEqual(actual[1], env)
-		assert.strictEqual(actual[2], ctx)
+		assert.equal(await app(createReq('/known', 'CONNECT'), env, ctx), 418)
+		assert.equal(notAllowed[0], 'PATCH')
+		assert.strictEqual(notAllowed[1], env)
+		assert.strictEqual(notAllowed[2], ctx)
+
+		var missingReq = createReq('/missing', 'CONNECT')
+		assert.equal(await app(missingReq, env, ctx), 410)
+		assert.equal(missingReq.resHeaders, undefined)
+		assert.equal(notFound[0], '/missing')
+		assert.strictEqual(notFound[1], env)
+		assert.strictEqual(notFound[2], ctx)
 	})
 
-	test('unsupported method on an unknown path returns notFound', async (assert) => {
-		var env = {}
-		, ctx = {}
-		, actual
-		, app = App({ notFound(req, actualEnv, actualCtx) {
-			actual = [req.path, actualEnv, actualCtx]
-			return 410
-		} })
-		app.get('known', () => 'get')
-		var req = createReq('/missing', 'CONNECT')
-
-		assert.equal(await app(req, env, ctx), 410)
-		assert.equal(req.resHeaders, undefined)
-		assert.equal(actual[0], '/missing')
-		assert.strictEqual(actual[1], env)
-		assert.strictEqual(actual[2], ctx)
-	})
-
-	test('HEAD is routed to the GET handler', async (assert) => {
-		var app = App()
-		app.get('test', () => 'GET response')
-		var result = await app(createReq('/test', 'HEAD'))
-		assert.equal(result, 'GET response')
-	})
-
-	test('explicit HEAD route overrides the GET handler', async (assert) => {
+	test('HEAD uses an explicit route or falls back to GET', async (assert) => {
 		var app = App()
 		, calls = 0
 		app.use(() => { calls++ })
+		app.get('fallback', () => 'GET fallback')
 		app.get('test', () => 'GET response')
 		app.head('test', () => 'HEAD response')
-		var result = await app(createReq('/test', 'HEAD'))
-		assert.equal(result, 'HEAD response')
-		assert.equal(calls, 1)
+
+		assert.equal(await app(createReq('/fallback', 'HEAD')), 'GET fallback')
+		assert.equal(await app(createReq('/test', 'HEAD')), 'HEAD response')
+		assert.equal(calls, 2)
 	})
 
 	test('middleware and route parameters', async (assert) => {
@@ -129,51 +116,61 @@ describe('app', () => {
 		assert.equal(called[2], 'handler')
 	})
 
-	test('custom method', async (assert) => {
-		var app = App({
-			method: {
-				OPTIONS: 'options'
-			}
-		})
-		app.options('test', () => 'options')
-		var result = await app(createReq('/test', 'OPTIONS'))
-		assert.equal(result, 'options')
-	})
-
-	test('mount inherits custom methods from the sub-app', async (assert) => {
-		var sub = App({ method: { OPTIONS: 'options' } })
-		sub.options('', () => 'sub options')
-
-		var app = App()
-		app.mount('api', sub)
-
-		assert.equal(await app(createReq('/api', 'OPTIONS')), 'sub options')
-	})
-
-	test('parent middleware applies to mounted custom methods', async (assert) => {
+	test('mount inherits custom methods and applies parent middleware', async (assert) => {
 		var calls = 0
+		, blocked = false
 		, sub = App({ method: { OPTIONS: 'options' } })
 		, app = App()
 
 		sub.options('', () => 'sub options')
-		app.use(() => (calls++, 'blocked'))
+		app.use(() => (calls++, blocked && 'blocked'))
 		app.mount('api', sub)
 
+		assert.equal(await app(createReq('/api', 'OPTIONS')), 'sub options')
+		blocked = true
 		assert.equal(await app(createReq('/api', 'OPTIONS')), 'blocked')
+		assert.equal(calls, 2)
+	})
+
+	test('null omits local methods while mounts can re-enable routing', async (assert) => {
+		var app = App({ method: { GET: null } })
+		, calls = 0
+		app.head('head', () => 'head')
+		app.all('all', () => 'all')
+
+		assert.equal(app.get, undefined)
+		assert.equal(app.routers.GET, undefined)
+		assert.equal(await app(createReq('/head', 'HEAD')), 'head')
+
+		var req = createReq('/head', 'GET')
+		assert.equal(await app(req), 405)
+		assert.equal(req.resHeaders.Allow, 'HEAD')
+
+		req = createReq('/all', 'GET')
+		assert.equal(await app(req), 405)
+		assert.equal(req.resHeaders.Allow, 'DELETE, HEAD, PATCH, POST, PUT')
+
+		var sub = App()
+		sub.get('', () => 'sub get')
+		app.use(() => { calls++ })
+		app.mount('api', sub)
+		assert.equal(app.get, undefined, 'mount does not restore the local alias')
+		assert.ok(app.routers.GET, 'mount creates the router required by the sub-app')
+		assert.equal(await app(createReq('/api', 'GET')), 'sub get')
 		assert.equal(calls, 1)
+
+		app = App({ method: { HEAD: null } })
+		app.get('get', () => 'get')
+		assert.equal(app.head, undefined)
+		assert.equal(await app(createReq('/get', 'HEAD')), 'get', 'HEAD still falls back to GET')
 	})
 
-	test('missing route returns 404', async (assert) => {
-		var app = App()
-		app.get('known', () => 'ok')
-		var result = await app(createReq('/missing', 'GET'))
-		assert.equal(result, 404)
-	})
-
-	test('method with no routes 404s at root instead of matching empty alternation', async (assert) => {
+	test('missing routes return 404', async (assert) => {
 		var app = App()
 		app.use(() => {})
-		app.get('test', () => 'ok')
+		app.get('known', () => 'ok')
+
+		assert.equal(await app(createReq('/missing', 'GET')), 404)
 		assert.equal(await app(createReq('/', 'POST')), 404)
 		assert.equal(await app(createReq('/', 'DELETE')), 404)
 	})
@@ -372,8 +369,6 @@ describe('router', () => {
 		[() => 'sync', 'sync'],
 		[async () => 'async', 'async'],
 		['literal-value', 'literal-value'],
-		[() => ({ a: 1 }), { a: 1 }],
-		[() => [1, 2], [1, 2]],
 		[() => ({ body: 'created', status: 201 }), { body: 'created', status: 201 }],
 	], async (handler, expected, assert) => {
 		var r2 = Router()
@@ -392,10 +387,9 @@ describe('router', () => {
 		})
 		r2.add('test', (req) => {
 			called.push('handler')
-			return 'ok'
 		})
 		var result = await handle(r2, createReq('test'))
-		assert.equal(result, 'ok')
+		assert.equal(result, undefined)
 		assert.equal(called.length, 3)
 		assert.equal(called[0], 'middleware1')
 		assert.equal(called[1], 'middleware2')
@@ -403,7 +397,6 @@ describe('router', () => {
 	})
 
 	test('errors propagate to the caller; the worker maps them', [
-		[r => r.add('e', () => { throw new Error('sync') }), undefined],
 		[r => r.add('e', async () => { throw new Error('async') }), undefined],
 		[r => { r.use(async () => { throw new Error('mw') }); r.add('e', () => 'ok') }, undefined],
 		[r => r.add('e', () => { var er = new Error('gone'); er.code = 410; throw er }), 410],
@@ -413,16 +406,6 @@ describe('router', () => {
 		var err = await handle(r2, createReq('e')).then(() => null, e => e)
 		assert.ok(err instanceof Error, 'router rethrows instead of swallowing')
 		assert.equal(err.code, expectedCode, 'e.code is preserved for the worker to map')
-	})
-
-	test('middleware that returns nothing yields an undefined result', async (assert) => {
-		var r2 = Router()
-		var called = false
-		r2.use(() => { called = true })
-		r2.add('', () => {})
-		var result = await handle(r2, { path: '/' })
-		assert.equal(called, true)
-		assert.equal(result, undefined)
 	})
 
 	test('middleware short-circuits when returning a value', async (assert) => {

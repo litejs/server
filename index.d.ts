@@ -60,7 +60,7 @@ export interface RouterOptions {
 }
 
 export interface AppOptions extends RouterOptions {
-	method?: Record<string, string>
+	method?: Record<string, string | null>
 	notAllowed?: Handler
 }
 

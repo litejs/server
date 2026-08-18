@@ -9,7 +9,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 , App = opts => {
 	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+\\/)*)', ...opts?.extensions }
-	, keys = Object.keys(methods)
+	, keys = Object.keys(methods).filter(method => methods[method])
 	, middleware = []
 	, addRouter = (router, method) => routers[method] || (
 		router = routers[method] = Router(exts),
@@ -18,7 +18,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	)
 	, app = (req, env, ctx) => {
 		let matched = req.method, tmp = routers[matched]
-		if (matched === 'HEAD' && !tmp.match(req)) tmp = routers.GET
+		if (matched === 'HEAD' && !tmp?.match(req)) tmp = routers.GET
 		if ((matched = tmp?.match(req))) return tmp.handle(req, env, ctx, matched)
 		if ((tmp = keys.filter(method => routers[method].match(req) || method === 'HEAD' && routers.GET?.match(req)).join(', '))) {
 			(req.resHeaders ??= {}).Allow = tmp
