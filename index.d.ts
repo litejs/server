@@ -65,7 +65,6 @@ export interface AppOptions extends RouterOptions {
 }
 
 export interface RouterInstance {
-	routes: unknown[]
 	match(req: ServerRequest): RegExpExecArray | "" | null
 	add(route: string, handler: RouteHandler, _raw?: string): this
 	use(...fns: Handler[]): void
@@ -88,7 +87,7 @@ export interface AppInstance {
 }
 
 export function App(opts?: AppOptions): AppInstance
-export function Router(extensions?: Record<string, string>): RouterInstance
+export function Router(extensions: Record<string, string>): RouterInstance
 
 //
 // lib/node.mjs + lib/env.mjs

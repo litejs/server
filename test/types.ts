@@ -9,6 +9,7 @@ import {
 	KV,
 	R2,
 	R2Object,
+	Router,
 	S3,
 	Server,
 	ServerRequest,
@@ -35,6 +36,11 @@ type Expect<T extends true> = T
 const app = App()
 const headOnly = App({ method: { GET: null } })
 headOnly.head("health", 204)
+const router = Router({})
+// @ts-expect-error Router internals are not exposed
+router.routes
+// @ts-expect-error Router requires an extensions map
+Router()
 app.get("users/{id}", req => ({ id: req.param.id }))
 	.head("users/{id}", req => 204)
 	.get("files/{path*}", req => req.param.path)

@@ -3,7 +3,8 @@ import { isFn } from './util.mjs'
 
 
 var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
-, routeEsc = s => encodeURI(s)
+, routeEnc = s => encodeURI(s).replace(/[?#]/g, encodeURIComponent)
+, routeEsc = s => routeEnc(s)
 	.replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
 	.replace(/%[\dA-F]{2}/g, val => val.replace(/[A-F]/g, char => '[' + char + char.toLowerCase() + ']'))
 , App = opts => {
@@ -33,7 +34,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 
 	app.all = (route, handler, _raw) => each(r => r.add(route, handler, _raw))
 	app.mount = (path, sub) => {
-		var encLen = path ? encodeURI(path).length + 1 : 0
+		var encLen = path ? routeEnc(path).length + 1 : 0
 		sub.each(addRouter)
 		return app.all(
 			path,

@@ -206,6 +206,7 @@ describe('app', () => {
 		var app = App()
 		app.get('', () => 'home')
 		assert.strictEqual(app.mount('hi', sub), app, 'mount returns the app for chaining')
+		app.mount('api?key#part', sub)
 		app.get('hih', 'app hih')
 
 		var result = await app(createReq('/', 'GET'))
@@ -228,6 +229,9 @@ describe('app', () => {
 
 		result = await app(createReq('/hi/path/42', 'GET'))
 		assert.equal(result, '/path/42', 'req.path inside sub is prefix-stripped')
+
+		result = await app(createReq('/api%3Fkey%23part/path/42', 'GET'))
+		assert.equal(result, '/path/42', 'encoded mount prefix is stripped')
 	})
 
 	test('mount at root preserves the leading slash', async (assert) => {
@@ -320,6 +324,8 @@ describe('router', () => {
 		'about/*',
 		'user/{userId+}-post',
 		'user/pre-{userId+}',
+		'literal?mark',
+		'literal#mark',
 	]
 	routes.forEach((route, index) => {
 		r.add(route, (req) => ({ index, param: req.param }))
@@ -355,6 +361,8 @@ describe('router', () => {
 		['about', -1, {}],
 		['about/*', 7, {}],
 		['about/a', -1, {}],
+		['literal%3Fmark', 10, {}],
+		['literal%23mark', 11, {}],
 
 	], async (url, expectedIndex, expectedParam, assert) => {
 		var result = await handle(r, createReq(url))
