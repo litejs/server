@@ -104,7 +104,7 @@ describe('worker', () => {
 })
 
 describe('localServer', () => {
-	test('mounts the static root last and hands back nothing', async (assert, mock) => {
+	test('mounts the static root last and returns the listen() controller', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		mock.swap(process, 'env', {})
 		mock.swap(process, 'on', () => {}) // setupShutdown must not touch the test runner
@@ -118,7 +118,7 @@ describe('localServer', () => {
 
 		var server = Server(app, join(import.meta.dirname, 'fixtures'))
 		assert.equal(calls[0].env.PORT, 8080, 'PORT comes from loadEnv, not from the caller')
-		assert.strictEqual(server, undefined, 'Server() is an entrypoint, not a handle')
+		assert.equal(typeof server.close, 'function', 'hands back the listen() controller')
 
 		var routed = await calls[0].fetch(new Request('http://localhost/x'))
 		assert.equal(await routed.text(), 'own route', 'the app own routes still win')

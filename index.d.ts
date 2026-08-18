@@ -114,8 +114,9 @@ export function worker(app: Handler, env?: Env): (req: Request, env?: Env, ctx?:
 
 export type FetchHandler = (req: Request, env?: Env, ctx?: Ctx) => Promise<Response>
 // What the host wants as its module default: { fetch } on Cloudflare and Vercel,
-// the handler itself on Netlify, nothing where the library owns the socket (Node.js, Bun, Deno, txiki) or registers a fetch listener.
-export function Server(app: Handler, dir?: string): FetchHandler | { fetch: FetchHandler } | void
+// the handler itself on Netlify, a controller on Node.js, Bun, and Deno,
+// or nothing where the runtime registers its own listener.
+export function Server(app: Handler, dir?: string): FetchHandler | { fetch: FetchHandler } | Server | void
 
 //
 // lib/serve.mjs
