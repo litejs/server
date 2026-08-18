@@ -40,8 +40,10 @@ app.get("bye/moon", (req, env) => { /* Never executed because the previous handl
 app.get("teapot", (req) => (req.resStatus = 418, "no coffee"))
 app.get("notFound", () => 404) // Return a number to send a status code
 
-// Group routes and mount them under a prefix, also without leading or trailing `/`
+// Middleware does not accept a path; add it to a sub-app to scope it to the mount prefix.
+// Mount the sub-app under a prefix written without leading or trailing `/`.
 const subApp = App()
+.use(auth)
 .post("", (req, env) => {
     // POST /api -> req.path == "/" and req.fullPath == "/api"
     return { data: [] }

@@ -10,8 +10,10 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
 	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+\\/)*)', ...opts?.extensions }
 	, keys = Object.keys(methods)
+	, middleware = []
 	, addRouter = (router, method) => routers[method] || (
 		router = routers[method] = Router(exts),
+		router.use(...middleware),
 		methods[method] ? app[methods[method]] = router.add : keys.push(method)
 	)
 	, app = (req, env, ctx) => {
@@ -39,7 +41,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 			routeEsc(path) + '(?:\\/.*|)'
 		)
 	}
-	app.use = (...fns) => each(r => r.use(...fns))
+	app.use = (...fns) => (middleware.push(...fns), each(r => r.use(...fns)))
 
 	return app
 }

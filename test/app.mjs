@@ -150,6 +150,19 @@ describe('app', () => {
 		assert.equal(await app(createReq('/api', 'OPTIONS')), 'sub options')
 	})
 
+	test('parent middleware applies to mounted custom methods', async (assert) => {
+		var calls = 0
+		, sub = App({ method: { OPTIONS: 'options' } })
+		, app = App()
+
+		sub.options('', () => 'sub options')
+		app.use(() => (calls++, 'blocked'))
+		app.mount('api', sub)
+
+		assert.equal(await app(createReq('/api', 'OPTIONS')), 'blocked')
+		assert.equal(calls, 1)
+	})
+
 	test('missing route returns 404', async (assert) => {
 		var app = App()
 		app.get('known', () => 'ok')
