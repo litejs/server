@@ -21,7 +21,6 @@
     "start": "wrangler dev"
   },
   "devDependencies": {
-    "esbuild": "0.28.1",
     "workerd": "1.20260611.1"
   }
 }

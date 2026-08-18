@@ -25,7 +25,6 @@
   "devDependencies": {
     "@fastly/cli": "16.0.0",
     "@fastly/js-compute": "3.44.3",
-    "esbuild": "0.28.2",
     "wrangler": "4.123.0"
   }
 }

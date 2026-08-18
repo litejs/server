@@ -1,6 +1,5 @@
 {
   "lint": {
-    "jshint": ".github/jshint.json",
     "_": [
       "*.json",
       "*.mjs",
