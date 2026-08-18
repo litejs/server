@@ -8,13 +8,22 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	.replace(/%[\dA-F]{2}/g, val => val.replace(/[A-F]/g, char => '[' + char + char.toLowerCase() + ']'))
 , App = opts => {
 	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
+	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+\\/)*)', ...opts?.extensions }
 	, keys = Object.keys(methods)
-	, notAllowed = opts?.notAllowed || (req => ((req.resHeaders ??= {}).Allow = keys.join(', '), 405))
 	, addRouter = (router, method) => routers[method] || (
-		router = routers[method] = Router(opts),
+		router = routers[method] = Router(exts),
 		methods[method] ? app[methods[method]] = router.add : keys.push(method)
 	)
-	, app = (req, env, ctx) => ((req.method === 'HEAD' && !routers.HEAD?.match(req) ? routers.GET : routers[req.method])?.handle || notAllowed)(req, env, ctx)
+	, app = (req, env, ctx) => {
+		let matched = req.method, tmp = routers[matched]
+		if (matched === 'HEAD' && !tmp.match(req)) tmp = routers.GET
+		if ((matched = tmp?.match(req))) return tmp.handle(req, env, ctx, matched)
+		if ((tmp = keys.filter(method => routers[method].match(req) || method === 'HEAD' && routers.GET?.match(req)).join(', '))) {
+			(req.resHeaders ??= {}).Allow = tmp
+			return opts?.notAllowed?.(req, env, ctx) ?? 405
+		}
+		return opts?.notFound?.(req, env, ctx) ?? 404
+	}
 	, each = app.each = fn => (keys.forEach(method => fn(routers[method], method)), app)
 	, routers = app.routers = Object.create(null)
 
@@ -34,17 +43,14 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 
 	return app
 }
-, Router = opts => {
+, Router = exts => {
 	var re
 	, reStr = ''
-	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+\\/)*)', ...opts?.extensions }
 	, groups = 1
-	, match = req => req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || '')
 	, routes = []
 
 	return {
-		routes,
-		match,
+		match: req => req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || ''),
 		add(route, handler, _raw) {
 			var endSlot = routes.push(groups++, re = 0, route) - 2
 			reStr += (reStr ? '|(' : '(') + (_raw || route.replace(routeRe, (_, expr, ext, toEsc) =>
@@ -56,11 +62,9 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 		use(...fns) {
 			routes.push(0, 2 + routes.length + fns.length, ...fns)
 		},
-		async handle(req, env, ctx) {
-			var end, m, pos = 0, len = routes.length, param = req.param ??= {}
-			, matched = match(req)
+		async handle(req, env, ctx, matched) {
 			// Handlers and middleware throw on error; the worker owns error -> response.
-			if (matched) for (; pos < len; pos = end) {
+			for (var end, m, pos = 0, len = routes.length, param = req.param ??= {}; pos < len; pos = end) {
 				end = routes[pos + 1]
 				if ((m = routes[pos++]) < 1) {
 					// Middleware: [0, end, ...fns]
@@ -73,7 +77,6 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 					return isFn(m) ? m(req, env, ctx) : m
 				}
 			}
-			return opts?.notFound?.(req, env, ctx) ?? 404
 		}
 	}
 }

@@ -32,12 +32,59 @@ describe('app', () => {
 		}
 	})
 
-	test('method not allowed - 405', async (assert) => {
+	test('method not allowed lists methods matching the requested path', async (assert) => {
 		var app = App()
+		app.get('test', () => 'get')
+		app.post('test', () => 'post')
+		app.put('other', () => 'put')
 		var req = createReq('/test', 'CONNECT')
 		var result = await app(req)
 		assert.equal(result, 405)
-		assert.equal(req.resHeaders.Allow, 'DELETE, GET, HEAD, PATCH, POST, PUT')
+		assert.equal(req.resHeaders.Allow, 'GET, HEAD, POST')
+	})
+
+	test('configured method without a matching route returns 405', async (assert) => {
+		var app = App()
+		app.get('test', () => 'get')
+		var req = createReq('/test', 'POST')
+
+		assert.equal(await app(req), 405)
+		assert.equal(req.resHeaders.Allow, 'GET, HEAD')
+	})
+
+	test('custom notAllowed receives the route-specific Allow header', async (assert) => {
+		var actual
+		, env = {}
+		, ctx = {}
+		, app = App({ notAllowed(req, actualEnv, actualCtx) {
+			actual = [req.resHeaders.Allow, actualEnv, actualCtx]
+			return 418
+		} })
+		app.patch('known', () => 'patch')
+
+		var result = await app(createReq('/known', 'CONNECT'), env, ctx)
+		assert.equal(result, 418)
+		assert.equal(actual[0], 'PATCH')
+		assert.strictEqual(actual[1], env)
+		assert.strictEqual(actual[2], ctx)
+	})
+
+	test('unsupported method on an unknown path returns notFound', async (assert) => {
+		var env = {}
+		, ctx = {}
+		, actual
+		, app = App({ notFound(req, actualEnv, actualCtx) {
+			actual = [req.path, actualEnv, actualCtx]
+			return 410
+		} })
+		app.get('known', () => 'get')
+		var req = createReq('/missing', 'CONNECT')
+
+		assert.equal(await app(req, env, ctx), 410)
+		assert.equal(req.resHeaders, undefined)
+		assert.equal(actual[0], '/missing')
+		assert.strictEqual(actual[1], env)
+		assert.strictEqual(actual[2], ctx)
 	})
 
 	test('HEAD is routed to the GET handler', async (assert) => {
@@ -118,12 +165,14 @@ describe('app', () => {
 		assert.equal(await app(createReq('/', 'DELETE')), 404)
 	})
 
-	test('mount: unimplemented method 404s at mount root, not just sub-paths', async (assert) => {
+	test('mount: unimplemented method returns 405 at the mount root', async (assert) => {
 		var sub = App()
 		sub.get('', () => 'sub root')
 		var app = App()
 		app.mount('api', sub)
-		assert.equal(await app(createReq('/api', 'DELETE')), 404)
+		var req = createReq('/api', 'DELETE')
+		assert.equal(await app(req), 405)
+		assert.equal(req.resHeaders.Allow, 'GET, HEAD')
 	})
 
 	test('env forwarded to handlers', [
@@ -240,8 +289,16 @@ describe('router', () => {
 		req.path = urlObj.pathname
 		return req
 	}
+	async function handle(router, req, env, ctx) {
+		var matched = router.match(req)
+		return matched && router.handle(req, env, ctx, matched)
+	}
 
-	var r = Router()
+	var r = Router({
+		'*': '(.*)',
+		'+': '(\\d+)',
+		'/': '((?:[^/]+\\/)*)',
+	})
 	var routes = [
 		'home',
 		'user/{userId+}',
@@ -256,6 +313,10 @@ describe('router', () => {
 	]
 	routes.forEach((route, index) => {
 		r.add(route, (req) => ({ index, param: req.param }))
+	})
+
+	test('match treats a missing path as empty', async (assert) => {
+		assert.equal(r.match({}), null)
 	})
 
 	test('-> {0}', [
@@ -286,7 +347,7 @@ describe('router', () => {
 		['about/a', -1, {}],
 
 	], async (url, expectedIndex, expectedParam, assert) => {
-		var result = await r.handle(createReq(url))
+		var result = await handle(r, createReq(url))
 		var actualIndex = result?.index ?? -1
 		var actualParam = result?.param ?? {}
 		assert
@@ -304,7 +365,7 @@ describe('router', () => {
 	], async (handler, expected, assert) => {
 		var r2 = Router()
 		r2.add('test', handler)
-		assert.equal(await r2.handle(createReq('test')), expected)
+		assert.equal(await handle(r2, createReq('test')), expected)
 	})
 
 	test('middleware with sync and async', async (assert) => {
@@ -320,7 +381,7 @@ describe('router', () => {
 			called.push('handler')
 			return 'ok'
 		})
-		var result = await r2.handle(createReq('test'))
+		var result = await handle(r2, createReq('test'))
 		assert.equal(result, 'ok')
 		assert.equal(called.length, 3)
 		assert.equal(called[0], 'middleware1')
@@ -336,7 +397,7 @@ describe('router', () => {
 	], async (setup, expectedCode, assert) => {
 		var r2 = Router()
 		setup(r2)
-		var err = await r2.handle(createReq('e')).then(() => null, e => e)
+		var err = await handle(r2, createReq('e')).then(() => null, e => e)
 		assert.ok(err instanceof Error, 'router rethrows instead of swallowing')
 		assert.equal(err.code, expectedCode, 'e.code is preserved for the worker to map')
 	})
@@ -346,7 +407,7 @@ describe('router', () => {
 		var called = false
 		r2.use(() => { called = true })
 		r2.add('', () => {})
-		var result = await r2.handle({ path: '/' })
+		var result = await handle(r2, { path: '/' })
 		assert.equal(called, true)
 		assert.equal(result, undefined)
 	})
@@ -357,16 +418,8 @@ describe('router', () => {
 		r2.use(() => { called.push('a'); return { error: 'denied' } })
 		r2.use(() => { called.push('b') })
 		r2.add('test', () => { called.push('handler'); return 'ok' })
-		var result = await r2.handle({ path: '/test' })
+		var result = await handle(r2, { path: '/test' })
 		assert.equal(called, ['a'])
 		assert.equal(result, { error: 'denied' })
-	})
-
-	test('notFound option', async (assert) => {
-		var r2 = Router({ notFound: () => ({ body: 'custom 404', status: 404 }) })
-		r2.add('test', () => 'ok')
-		var result = await r2.handle({})
-		assert.equal(result.body, 'custom 404')
-		assert.equal(result.status, 404)
 	})
 })

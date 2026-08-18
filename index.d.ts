@@ -69,7 +69,7 @@ export interface RouterInstance {
 	match(req: ServerRequest): RegExpExecArray | "" | null
 	add(route: string, handler: RouteHandler, _raw?: string): this
 	use(...fns: Handler[]): void
-	handle(req: ServerRequest, env: Env, ctx: Ctx): Promise<HandlerResult>
+	handle(req: ServerRequest, env: Env, ctx: Ctx, matched: RegExpExecArray): Promise<HandlerResult>
 }
 
 // Route and mount paths are written without leading and trailing '/' - 'hello/{name}' NOT '/hello/{name}/'
@@ -88,7 +88,7 @@ export interface AppInstance {
 }
 
 export function App(opts?: AppOptions): AppInstance
-export function Router(opts?: RouterOptions): RouterInstance
+export function Router(extensions?: Record<string, string>): RouterInstance
 
 //
 // lib/node.mjs + lib/env.mjs
