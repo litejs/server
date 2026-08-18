@@ -175,7 +175,7 @@ describe('app', () => {
 		assert.equal(await app(createReq('/', 'DELETE')), 404)
 	})
 
-	test('mount: unimplemented method returns 405 at the mount root', async (assert) => {
+	test('mount reports actual sub-app methods for unimplemented methods', async (assert) => {
 		var sub = App()
 		sub.get('', () => 'sub root')
 		var app = App()
@@ -183,6 +183,14 @@ describe('app', () => {
 		var req = createReq('/api', 'DELETE')
 		assert.equal(await app(req), 405)
 		assert.equal(req.resHeaders.Allow, 'GET, HEAD')
+
+		req = createReq('/api', 'CONNECT')
+		assert.equal(await app(req), 405)
+		assert.equal(req.resHeaders.Allow, 'GET, HEAD')
+
+		req = createReq('/api/missing', 'CONNECT')
+		assert.equal(await app(req), 404)
+		assert.equal(req.resHeaders, undefined)
 	})
 
 	test('env forwarded to handlers', [

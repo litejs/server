@@ -44,7 +44,7 @@
   ],
   "scripts": {
     "bundle": "esbuild app.mjs --bundle --minify --format=esm --outfile=bundle.js",
-    "lint": "lj lint && eslint --config .github/eslint.config.mjs .github/eslint.config.mjs app.mjs index.mjs util.mjs lib",
+    "lint": "lj lint && eslint --config .github/eslint.config.mjs *.mjs lib",
     "test": "lj t --no-color 'test/*.mjs'",
     "test:e2e": "cd test/server/ && npm i && node e2e.mjs"
   },

@@ -1,8 +1,8 @@
 
 
 var UNDEF
-, ENC = new TextEncoder()
-, DEC = new TextDecoder()
+, ENC = /* @__PURE__ */ new TextEncoder()
+, DEC = /* @__PURE__ */ new TextDecoder()
 , O_PROTO = Object.prototype
 , b64Raw = str => {
 	try {

@@ -4,23 +4,23 @@ import { isFn } from './util.mjs'
 
 var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 , routeEnc = s => encodeURI(s).replace(/[?#]/g, encodeURIComponent)
-, routeEsc = s => routeEnc(s)
-	.replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&')
-	.replace(/%[\dA-F]{2}/g, val => val.replace(/[A-F]/g, char => '[' + char + char.toLowerCase() + ']'))
+, routeEsc = s => routeEnc(s).replace(
+	/(%)[\dA-F]{2}|[.*+?^${}()|[\]\\]/g,
+	(val, pr) => pr ? val.replace(/[A-F]/g, char => '[' + char + char.toLowerCase() + ']') : '\\' + val
+)
 , App = opts => {
 	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
-	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+\\/)*)', ...opts?.extensions }
+	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+/)*)', ...opts?.extensions }
 	, keys = Object.keys(methods).filter(method => methods[method])
 	, middleware = []
-	, addRouter = (router, method) => routers[method] || (
-		router = routers[method] = Router(exts),
-		router.use(...middleware),
-		methods[method] ? app[methods[method]] = router.add : keys.push(method)
+	, mounts = Router(exts)
+	, addRouter = (_, method) => routers[method] || (
+		(routers[method] = Router(exts)).use(...middleware),
+		methods[method] ? app[methods[method]] = routers[method].add : keys.push(method)
 	)
 	, app = (req, env, ctx) => {
-		let matched = req.method, tmp = routers[matched]
-		if (matched === 'HEAD' && !tmp?.match(req)) tmp = routers.GET
-		if ((matched = tmp?.match(req))) return tmp.handle(req, env, ctx, matched)
+		let tmp = routers[req.method], matched = tmp?.match(req)
+		if (matched || req.method === 'HEAD' && (matched = (tmp = routers.GET)?.match(req)) || (matched = (tmp = mounts).match(req))) return tmp.handle(req, env, ctx, matched)
 		if ((tmp = keys.filter(method => routers[method].match(req) || method === 'HEAD' && routers.GET?.match(req)).join(', '))) {
 			(req.resHeaders ??= {}).Allow = tmp
 			return opts?.notAllowed?.(req, env, ctx) ?? 405
@@ -35,14 +35,13 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	app.all = (route, handler, _raw) => each(r => r.add(route, handler, _raw))
 	app.mount = (path, sub) => {
 		var encLen = path ? routeEnc(path).length + 1 : 0
+		, raw = routeEsc(path) + '(?:/.*|)'
+		, handler = (req, env, ctx) => (req.mount = path, req.path = req.path.slice(encLen) || '/', sub(req, env, ctx))
 		sub.each(addRouter)
-		return app.all(
-			path,
-			(req, env, ctx) => (req.mount = path, req.path = req.path.slice(encLen) || '/', sub(req, env, ctx)),
-			routeEsc(path) + '(?:\\/.*|)'
-		)
+		mounts.add(path, handler, raw)
+		return app.all(path, handler, raw)
 	}
-	app.use = (...fns) => (middleware.push(...fns), each(r => r.use(...fns)))
+	app.use = (...fns) => (middleware.push(...fns), mounts.use(...fns), each(r => r.use(...fns)))
 
 	return app
 }
@@ -53,7 +52,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 	, routes = []
 
 	return {
-		match: req => req && reStr && (re || (re = RegExp('^\\/*(?:' + reStr + ')[\\/\\s]*$'))).exec(req.path || ''),
+		match: req => reStr && (re ||= RegExp(`^/*(?:${reStr})[/\\s]*$`)).exec(req.path || ''),
 		add(route, handler, _raw) {
 			var endSlot = routes.push(groups++, re = 0, route) - 2
 			reStr += (reStr ? '|(' : '(') + (_raw || route.replace(routeRe, (_, expr, ext, toEsc) =>

@@ -1,7 +1,7 @@
 export default [{
 	files: ['.github/eslint.config.mjs', '*.mjs', 'lib/*.mjs'],
 	languageOptions: {
-		ecmaVersion: 'latest',
+		ecmaVersion: 2021,
 		sourceType: 'module',
 		globals: {
 			addEventListener: 'readonly',
