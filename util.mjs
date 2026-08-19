@@ -4,6 +4,7 @@ var UNDEF
 , ENC = /* @__PURE__ */ new TextEncoder()
 , DEC = /* @__PURE__ */ new TextDecoder()
 , O_PROTO = Object.prototype
+, splitRe = /[,\s]+/
 , b64Raw = str => {
 	try {
 		return atob(str.replace(/-/g, '+').replace(/_/g, '/'))
@@ -15,14 +16,23 @@ var UNDEF
 , b64Dec = str => decodeURIComponent(escape(b64Raw(str)))
 , b64Enc = buf => btoa(isStr(buf) ? unescape(encodeURIComponent(buf)) : String.fromCharCode(...toUint(buf)))
 , b64Url = buf => b64Enc(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+, each = (arr, fn, scope, key) => {
+	if (arr) {
+		if (isStr(arr)) arr = arr.split(splitRe)
+		if (isArr(arr)) arr.forEach(fn, scope)
+		else for (key in arr) if (hasOwn(arr, key)) fn.call(scope, arr[key], key, arr)
+	}
+}
 , fail = msg => { throw Error(msg) }
+, getProto = Object.getPrototypeOf
+, setProto = Object.setPrototypeOf
 , hasOwn = Object.hasOwn
 , header = (req, name) => req?.headers?.get(name) || ''
 , hex = val => Array.from(toUint(val), c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 , isArr = Array.isArray
 , isFn = fn => typeof fn === 'function'
 , isNum = num => typeof num === 'number' && num === num
-, isObj = obj => !!obj && (Object.getPrototypeOf(obj) || O_PROTO) === O_PROTO
+, isObj = obj => !!obj && (getProto(obj) || O_PROTO) === O_PROTO
 , isStr = str => typeof str === 'string'
 , joinBuf = (...p) => {
 	for (var out, i = p.length, j = i, len = 0; i--;) len += (p[i] = toUint(p[i])).length
@@ -49,7 +59,8 @@ var UNDEF
 export {
 	UNDEF,
 	b64Arr, b64Dec, b64Enc, b64Url,
-	fail, hasOwn, header, hex,
+	each, fail, hasOwn, header, hex,
+	getProto, setProto,
 	isArr, isFn, isNum, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,

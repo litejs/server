@@ -2,7 +2,7 @@
 import '@litejs/cli/test.js'
 import {
 	b64Arr, b64Dec, b64Enc, b64Url,
-	fail, hasOwn, header, hex,
+	each, fail, hasOwn, header, hex,
 	isArr, isFn, isNum, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,
@@ -10,6 +10,28 @@ import {
 
 describe('util.mjs', () => {
 	var undef
+
+	test('each iterates strings, arrays, and own object values', (assert, mock) => {
+		var scope = { name: 'scope' }
+		, inherited = { inherited: 0 }
+		, obj = Object.assign(Object.create(inherited), { a: 1, b: 2 })
+		, arr = ['d']
+		, fn = mock.fn()
+		each(null, fn, scope)
+		each('a, b\nc', fn, scope)
+		each(arr, fn, scope)
+		each(obj, fn, scope)
+		assert
+		.equal(fn.calls.map(call => [call.scope, call.args]), [
+			[scope, ['a', 0, ['a', 'b', 'c']]],
+			[scope, ['b', 1, ['a', 'b', 'c']]],
+			[scope, ['c', 2, ['a', 'b', 'c']]],
+			[scope, ['d', 0, arr]],
+			[scope, [1, 'a', obj]],
+			[scope, [2, 'b', obj]],
+		])
+		.end()
+	})
 
 	test('Base64', assert => {
 		assert.equal(b64Arr('+//+'), new Uint8Array([0xfb, 0xff, 0xfe]))
