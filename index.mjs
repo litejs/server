@@ -1,5 +1,6 @@
 
 export * from './util.mjs'
+export * from './event.mjs'
 export * from '#runtime'
 export * from './lib/shim-cloudflare.mjs'
 export { App, Router } from './app.mjs'

@@ -6,20 +6,34 @@
 //
 
 export const UNDEF: undefined
+export const aProto: typeof Array.prototype
+export function anyObj(obj: unknown): obj is object
 export function b64Arr(str: string): Uint8Array
 export function b64Dec(str: string): string
 export function b64Enc(buf: unknown): string
 export function b64Url(buf: unknown): string
+// sets the prototype in place and returns the same object, null by default
+export function Data<T extends object = Record<string, unknown>>(obj?: T, proto?: object | null): T
+export function each(arr: string | null | undefined, fn: (value: string, key: number, arr: string[]) => void, scope?: unknown): void
+export function each<T>(arr: T[] | null | undefined, fn: (value: T, key: number, arr: T[]) => void, scope?: unknown): void
+export function each<T>(arr: Record<string, T> | null | undefined, fn: (value: T, key: string, arr: Record<string, T>) => void, scope?: unknown): void
 export function fail(msg?: string): never
+export const getProto: typeof Object.getPrototypeOf
 export const hasOwn: typeof Object.hasOwn
 export function header(src: { headers?: Headers | { get(name: string): string | null } } | null | undefined, name: string): string
 export function hex(val: unknown): string
+// a non-enumerable, non-writable slot, invisible to spread and JSON
+export function hide<T extends object>(obj: T, key: PropertyKey, value: unknown): T
 export const isArr: typeof Array.isArray
 export function isFn(fn: unknown): fn is (...args: any[]) => any
 export function isNum(num: unknown): num is number
 export function isObj(obj: unknown): obj is Record<string, unknown>
 export function isStr(str: unknown): str is string
 export function joinBuf(...parts: unknown[]): Uint8Array
+export const oProto: typeof Object.prototype
+// the hidden slot, made once on first use
+export function ownSlot<T>(obj: object, key: PropertyKey, make: () => T): T
+export const setProto: typeof Object.setPrototypeOf
 export function toNum(val: unknown): number | null
 export function toStr(val: unknown): string
 export function toUint(val: unknown): Uint8Array
@@ -88,6 +102,23 @@ export interface AppInstance {
 
 export function App(opts?: AppOptions): AppInstance
 export function Router(extensions: Record<string, string>): RouterInstance
+
+//
+// event.mjs
+//
+
+export type Listener = (...args: any[]) => any
+// Truthy (the listener count in the slot) when the registration was made,
+// falsy when the call was ignored - broken input never throws.
+export type Registered = number | false | ''
+
+export function on(src: object, ev: string, fn: Listener, scope?: object | null): Registered
+export function one(src: object, ev: string, fn: Listener, scope?: object | null): Registered
+export function off(src: object, ev: string, fn: Listener, scope?: object | null): void
+export function emit(src: object, ev: string, ...args: any[]): Promise<number>
+export function listen(who: object, src: object, ev: string, fn: Listener, scope?: object | null, group?: unknown): Registered
+// key matches src, ev, fn, scope or group; without one every registration who owns is removed
+export function unlisten(who: object, key?: unknown): void
 
 //
 // lib/node.mjs + lib/env.mjs

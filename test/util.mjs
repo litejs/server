@@ -1,15 +1,29 @@
 
 import '@litejs/cli/test.js'
 import {
+	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
-	each, fail, hasOwn, header, hex,
-	isArr, isFn, isNum, isObj, isStr,
-	joinBuf,
+	each, fail, hasOwn, hide, header, hex,
+	isArr, isFn, isNum, anyObj, isObj, isStr,
+	getProto, joinBuf, ownSlot,
 	toNum, toStr, toUint,
 } from '../util.mjs'
 
 describe('util.mjs', () => {
 	var undef
+
+	test('Data sets the prototype in place', assert => {
+		var proto = Data({ inherited: 1 })
+		, obj = { own: 2 }
+		assert
+		.equal(Data(), {})
+		.strictEqual(getProto(Data()), null, 'null prototype by default')
+		.strictEqual(Data(obj, proto), obj, 'the same object, not a copy')
+		.strictEqual(getProto(obj), proto)
+		.equal([obj.own, obj.inherited], [2, 1])
+		.equal(Object.keys(obj), ['own'], 'inherited keys stay on the prototype')
+		.end()
+	})
 
 	test('each iterates strings, arrays, and own object values', (assert, mock) => {
 		var scope = { name: 'scope' }
@@ -63,6 +77,40 @@ describe('util.mjs', () => {
 		[{a:null}, 'a', true],
 	], (obj, key, expected, assert) => assert.equal(hasOwn(obj, key), expected).end())
 
+	test('hide defines a property that does not show', assert => {
+		var obj = { visible: 1 }
+		, key = Symbol('hidden')
+		assert
+		.strictEqual(hide(obj, 'secret', 42), obj, 'returns the object')
+		.equal(obj.secret, 42)
+		.equal(Object.keys(obj), ['visible'])
+		.equal(JSON.stringify(obj), '{"visible":1}')
+		.equal({ ...obj }, { visible: 1 }, 'a copy does not carry it')
+		.equal(Object.getOwnPropertyDescriptor(obj, 'secret'),
+			{ value: 42, writable: false, enumerable: false, configurable: false })
+		.equal(hide(obj, key, 'by symbol')[key], 'by symbol')
+		.end()
+	})
+
+	test('ownSlot makes a hidden slot once per object', assert => {
+		var made = 0
+		, make = () => (made++, [])
+		, proto = {}
+		, obj = Object.create(proto)
+		, protoSlot = ownSlot(proto, 'slot', make)
+		, slot = ownSlot(obj, 'slot', make)
+		protoSlot.push('proto')
+		slot.push('own')
+		assert
+		.equal(made, 2, 'an inherited slot is not reused')
+		.strictEqual(ownSlot(obj, 'slot', make), slot, 'later calls return the same slot')
+		.equal(made, 2, 'make runs once per object')
+		.equal([protoSlot, slot], [['proto'], ['own']])
+		.equal(hasOwn(obj, 'slot'), true)
+		.equal(Object.keys(obj), [], 'the slot is hidden')
+		.end()
+	})
+
 	test('header', (assert) => {
 		var req = new Request('http://localhost/', { headers: { range: 'bytes=0-1' } })
 		, res = new Response('', { headers: { 'Content-Type': 'text/plain' } })
@@ -114,13 +162,42 @@ describe('util.mjs', () => {
 			['', false],
 		], (value, expected, assert) => assert.equal(isNum(value), expected).end())
 
+		// anyObj takes anything that can hold a property, isObj only plain data
+		test('anyObj', [
+			[{}, true],
+			[Data(), true],
+			[Object.create(null), true],
+			[[], true],
+			[new Date(), true],
+			[new (class K {})(), true],
+			[Object(123), true],
+			// typeof calls a function a function and null an object, anyObj neither
+			[() => {}, false],
+			[Date, false],
+			[null, false],
+			[undef, false],
+			[Symbol(), false],
+			['', false],
+			['string', false],
+			[0, false],
+			[123, false],
+			[false, false],
+		], (value, expected, assert) => assert.equal(anyObj(value), expected).end())
+
 		test('isObj', [
 			[{}, true],
+			[Data(), true],
 			[{ a: 1 }, true],
 			[{ constructor: 1 }, true],
 			[Object.create(null), true],
+			[Object.create(Object.create(null)), true],
 			[[], false],
+			[new Date(), false],
+			[Date, false],
+			[() => {}, false],
+			[async () => {}, false],
 			[null, false],
+			['', false],
 			['string', false],
 			[123, false],
 		], (value, expected, assert) => assert.equal(isObj(value), expected).end())

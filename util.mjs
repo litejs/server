@@ -3,7 +3,9 @@
 var UNDEF
 , ENC = /* @__PURE__ */ new TextEncoder()
 , DEC = /* @__PURE__ */ new TextDecoder()
-, O_PROTO = Object.prototype
+, Data = (obj = {}, proto = null) => setProto(obj, proto)
+, aProto = Array.prototype
+, oProto = Object.prototype
 , splitRe = /[,\s]+/
 , b64Raw = str => {
 	try {
@@ -27,12 +29,19 @@ var UNDEF
 , getProto = Object.getPrototypeOf
 , setProto = Object.setPrototypeOf
 , hasOwn = Object.hasOwn
+, hide = (obj, key, value) => Object.defineProperty(obj, key, { value })
+, ownSlot = (obj, key, make) => (hasOwn(obj, key) ? obj : hide(obj, key, make()))[key]
 , header = (req, name) => req?.headers?.get(name) || ''
 , hex = val => Array.from(toUint(val), c => (c < 16 ? '0' : '') + c.toString(16)).join('')
+, anyObj = obj => !!obj && typeof obj === 'object'
 , isArr = Array.isArray
+, isExtensible = Object.isExtensible
 , isFn = fn => typeof fn === 'function'
 , isNum = num => typeof num === 'number' && num === num
-, isObj = obj => !!obj && (getProto(obj) || O_PROTO) === O_PROTO
+, isObj = (obj, proto) => anyObj(obj) && (
+	(proto = getProto(obj)) == null || proto === oProto ||
+	!hasOwn(proto, 'constructor') && isObj(proto)
+)
 , isStr = str => typeof str === 'string'
 , joinBuf = (...p) => {
 	for (var out, i = p.length, j = i, len = 0; i--;) len += (p[i] = toUint(p[i])).length
@@ -58,10 +67,11 @@ var UNDEF
 
 export {
 	UNDEF,
+	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
-	each, fail, hasOwn, header, hex,
-	getProto, setProto,
-	isArr, isFn, isNum, isObj, isStr,
+	each, fail, hasOwn, hide, header, hex,
+	aProto, oProto, getProto, ownSlot, setProto,
+	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,
 }

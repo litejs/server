@@ -4,6 +4,7 @@ import {
 	D1,
 	DB,
 	DO,
+	Data,
 	DurableObjectState,
 	Env,
 	KV,
@@ -13,18 +14,33 @@ import {
 	S3,
 	Server,
 	ServerRequest,
+	aProto,
+	anyObj,
 	awsVerify,
 	b64Url,
 	dedupe,
 	durableObject,
+	each,
+	emit,
+	getProto,
 	hex,
+	hide,
+	isObj,
 	listen,
 	loadEnv,
 	migrate,
+	off,
+	oProto,
+	on,
+	one,
+	ownSlot,
+	serve,
 	serveStatic,
+	setProto,
 	setupShutdown,
 	startCron,
 	toNum,
+	unlisten,
 	worker
 } from "@litejs/server"
 
@@ -88,12 +104,36 @@ const uploaded: Promise<R2Object> = s3.put("key", "data", { contentType: "text/p
 const presigned: Promise<string> = s3.url("key", { expires: 3600 })
 const verified: Promise<string | false | undefined> = awsVerify(new Request("http://localhost/"), () => "secret")
 
-const server = listen(app, env)
+const server = serve(app, env)
 const cron = startCron("*/5 * * * *", (controller, env, ctx) => controller.scheduledTime)
 setupShutdown([server, cron])
 
 const fetchHandler = worker(app, env)
 const res: Promise<Response> = fetchHandler(new Request("http://localhost/"))
+
+const emitter = {}
+const owner = {}
+on(emitter, "change", (value: number) => value)
+one(emitter, "spent", () => {}, owner)
+listen(owner, emitter, "change", () => {}, null, "group")
+const emitted: Promise<number> = emit(emitter, "change", 1)
+off(emitter, "change", () => {})
+unlisten(owner, "group")
+
+const proto = Data({ inherited: 1 })
+const data = Data({ own: 2 }, proto)
+const nullProto: Record<string, unknown> = Data()
+const slot: number[] = ownSlot(data, "slot", () => [])
+const hidden = hide(data, "slot", 1)
+const parent: object | null = getProto(data)
+setProto(data, null)
+each("a,b", (value, key) => value.length + key)
+each([1, 2], (value, key) => value + key)
+each({ a: 1 }, (value, key) => key.length + value)
+// the type guards narrow, anyObj to anything with a property, isObj to plain data
+const unknownValue: unknown = data
+const anyNarrowed: object | null = anyObj(unknownValue) ? unknownValue : null
+const objNarrowed: unknown = isObj(unknownValue) ? unknownValue.own : null
 
 const num: number | null = toNum("5min")
 const encoded: string = b64Url("data")
@@ -104,7 +144,11 @@ type ExpectServer = Expect<Equal<typeof server, Server>>
 type ExpectCounter = Expect<Equal<typeof counter, Counter>>
 type ExpectByName = Expect<Equal<typeof byName, Counter>>
 type ExpectCtx = Expect<Equal<Counter["ctx"], DurableObjectState>>
-type ExpectEnv = Expect<Equal<Parameters<typeof listen>[1], Env | undefined>>
+type ExpectEnv = Expect<Equal<Parameters<typeof serve>[1], Env | undefined>>
+type ExpectEmit = Expect<Equal<typeof emitted, Promise<number>>>
+type ExpectData = Expect<Equal<typeof data, { own: number }>>
+type ExpectSlot = Expect<Equal<typeof hidden, typeof data>>
+type ExpectProto = Expect<Equal<typeof aProto, any[]>>
 
 // runtime references to ensure values exist
 void putRes
@@ -120,4 +164,10 @@ void res
 void num
 void encoded
 void digest
+void nullProto
+void slot
+void parent
+void anyNarrowed
+void objNarrowed
+void oProto
 void routeMatch
