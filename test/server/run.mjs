@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-	DB, KV, R2, S3, durableObject, listen, loadEnv, serveStatic, setupShutdown
+	DB, KV, R2, S3, durableObject, loadEnv, serve, serveStatic, setupShutdown
 } from '../../index.mjs'
 import app from './app.mjs'
 import { Counter } from './counter.mjs'
@@ -25,7 +25,7 @@ if (env.S3_AWS_ID && env.S3_AWS_SECRET) env.S3 = S3({
 	accessId: env.S3_AWS_ID,
 	secret: env.S3_AWS_SECRET,
 })
-const server = listen(app, env)
+const server = serve(app, env)
 
 // Static files that Cloudflare server from ASSETS binding
 app.get("/{path*}", env.ASSETS.fetch)

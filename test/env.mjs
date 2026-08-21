@@ -104,21 +104,21 @@ describe('worker', () => {
 })
 
 describe('localServer', () => {
-	test('mounts the static root last and returns the listen() controller', async (assert, mock) => {
+	test('mounts the static root last and returns the serve() controller', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		mock.swap(process, 'env', {})
 		mock.swap(process, 'on', () => {}) // setupShutdown must not touch the test runner
 
-		// Every runtime hands localServer its own listen(); this one only records.
+		// Every runtime hands localServer its own serve(); this one only records.
 		var calls = []
-		, listen = (app, env) => (calls.push({ env, fetch: worker(app, env) }), { name: env.SERVER_NAME, close() {} })
-		, Server = localServer(listen)
+		, serve = (app, env) => (calls.push({ env, fetch: worker(app, env) }), { name: env.SERVER_NAME, close() {} })
+		, Server = localServer(serve)
 		, app = App()
 		app.get('x', () => 'own route')
 
 		var server = Server(app, join(import.meta.dirname, 'fixtures'))
 		assert.equal(calls[0].env.PORT, 8080, 'PORT comes from loadEnv, not from the caller')
-		assert.equal(typeof server.close, 'function', 'hands back the listen() controller')
+		assert.equal(typeof server.close, 'function', 'hands back the serve() controller')
 
 		var routed = await calls[0].fetch(new Request('http://localhost/x'))
 		assert.equal(await routed.text(), 'own route', 'the app own routes still win')

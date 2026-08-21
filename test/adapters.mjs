@@ -1,7 +1,7 @@
 
 import '@litejs/cli/test.js'
 import { App } from '../index.mjs'
-import { DurableObject, Server as ServerSW, listen as listenSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
+import { DurableObject, Server as ServerSW, serve as serveSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
 import https from 'node:https'
 import net from 'node:net'
 import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 // Test with swapped globals only in Node, on real runtimes those are read-only.
 // Real Bun/Deno behavior is tested by test/server/e2e.mjs.
 var skip = typeof Bun !== 'undefined' || typeof Deno !== 'undefined'
-, listenNode = skip ? null : async (...args) => (await import('../lib/node.mjs')).listen(...args)
+, serveNode = skip ? null : async (...args) => (await import('../lib/node.mjs')).serve(...args)
 , fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 , sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 // Poll until the server answers, decoupled from any adapter-specific readiness event.
@@ -61,7 +61,7 @@ describe('node adapter', !skip && (() => {
 
 		var port = 18723
 		, base = 'http://127.0.0.1:' + port
-		, server = await listenNode(app, { PORT: port, HOSTNAME: '127.0.0.1', BIND_ADDR: '127.0.0.1' })
+		, server = await serveNode(app, { PORT: port, HOSTNAME: '127.0.0.1', BIND_ADDR: '127.0.0.1' })
 		try {
 			var get = await untilReady(() => fetch(base + '/hi'))
 			assert.equal(get.status, 200)
@@ -86,11 +86,11 @@ describe('node adapter', !skip && (() => {
 		}
 	})
 
-	test('listen returns a { name, close } controller', async (assert, mock) => {
+	test('serve returns a { name, close } controller', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		// Omit HOSTNAME and BIND_ADDR to exercise their defaults.
 		var base = 'http://127.0.0.1:18724'
-		, server = await listenNode(App(), { PORT: 18724 })
+		, server = await serveNode(App(), { PORT: 18724 })
 		await untilReady(() => fetch(base))
 		assert.equal(typeof server.close, 'function')
 		server.reload() // without a TLS listener reload is a no-op
@@ -103,7 +103,7 @@ describe('node adapter', !skip && (() => {
 		, origin = 'http://127.0.0.1:' + port
 		// Every target below is unrouted, so notFound reports what the adapter built.
 		, app = App({ notFound: req => req.origin + ' ' + req.path })
-		, server = await listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		, server = await serveNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
 		try {
 			await untilReady(() => fetch(origin))
 
@@ -157,7 +157,7 @@ describe('node adapter', !skip && (() => {
 		}), { headers: { 'content-length': '999' } }))
 		app.get('hi', () => 'world')
 
-		var server = await listenNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		var server = await serveNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
 		try {
 			await untilReady(() => fetch(base + '/hi'))
 			// Headers are already sent, so the client can only see a cut-off body.
@@ -186,7 +186,7 @@ describe('node adapter', !skip && (() => {
 		copyFileSync(join(fixtures, 'tls1.key'), key)
 		copyFileSync(join(fixtures, 'tls1.crt'), cert)
 
-		var server = await listenNode(app, { HTTPS_KEY: key, HTTPS_CERT: cert, HTTPS_PORT: port, BIND_ADDR: '127.0.0.1' })
+		var server = await serveNode(app, { HTTPS_KEY: key, HTTPS_CERT: cert, HTTPS_PORT: port, BIND_ADDR: '127.0.0.1' })
 		try {
 			var r1 = await untilReady(() => httpsGet(port, '/hi'))
 			assert.equal(r1.status, 200)
@@ -213,7 +213,7 @@ describe('node adapter', !skip && (() => {
 
 		var httpsPort = 18732
 		, httpPort = 18733
-		, server = await listenNode(app, {
+		, server = await serveNode(app, {
 			HTTPS_KEY: join(fixtures, 'tls1.key'),
 			HTTPS_CERT: join(fixtures, 'tls1.crt'),
 			HTTPS_PORT: httpsPort,
@@ -260,7 +260,7 @@ describe('service-worker adapter', () => {
 		assert.equal(await (await responded).text(), 'sw-ok', 'the app answers through the event')
 	})
 
-	test('listen wires install, activate and fetch to the worker', async (assert, mock) => {
+	test('serve wires install, activate and fetch to the worker', async (assert, mock) => {
 		var app = App()
 		app.get('sw', () => 'sw-ok')
 
@@ -271,7 +271,7 @@ describe('service-worker adapter', () => {
 		mock.swap(globalThis, 'skipWaiting', () => { skipped = true })
 		mock.swap(globalThis, 'clients', { claim: () => 'claim-token' })
 
-		listenSW(app)
+		serveSW(app)
 
 		handlers.install()
 		assert.equal(skipped, true, 'install calls skipWaiting')

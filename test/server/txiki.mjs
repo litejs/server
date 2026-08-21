@@ -4,11 +4,11 @@
 // env is assembled by hand and the DO directory is a fixed relative path that
 // run:txiki creates.
 //
-// listen() rather than Server(), because Server(app, dir) takes a static root
+// serve() rather than Server(), because Server(app, dir) takes a static root
 // and this fixture has to pass its own bindings through as the env.
 
 import {
-	DB, KV, R2, S3, durableObject, listen, serveStatic
+	DB, KV, R2, S3, durableObject, serve, serveStatic
 } from '../../index.mjs'
 import app from './app.mjs'
 import { Counter } from './counter.mjs'
@@ -32,7 +32,7 @@ if (env.S3_AWS_ID && env.S3_AWS_SECRET) env.S3 = S3({
 	secret: env.S3_AWS_SECRET,
 })
 
-listen(app, env)
+serve(app, env)
 
 // Static files that Cloudflare serves from the ASSETS binding
 app.get('/{path*}', env.ASSETS.fetch)

@@ -99,7 +99,7 @@ export interface Server {
 	reload?(): void
 }
 
-export function listen(app: Handler, env?: Env): Server
+export function serve(app: Handler, env?: Env): Server
 export function loadEnv(file?: string | false, rest?: Env): Env & { SERVER_NAME: string }
 export function readFiles(dir: string, root?: string, ext?: string): string[]
 export function readCert(env: Env): { key: string, cert: string } | false | undefined
