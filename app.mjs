@@ -1,5 +1,5 @@
 
-import { isFn } from './util.mjs'
+import { Data, isFn } from './util.mjs'
 
 
 var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
@@ -28,7 +28,7 @@ var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
 		return opts?.notFound?.(req, env, ctx) ?? 404
 	}
 	, each = app.each = fn => (keys.forEach(method => fn(routers[method], method)), app)
-	, routers = app.routers = Object.create(null)
+	, routers = app.routers = Data()
 
 	each(addRouter)
 
