@@ -104,6 +104,28 @@ export function App(opts?: AppOptions): AppInstance
 export function Router(extensions: Record<string, string>): RouterInstance
 
 //
+// accept.mjs
+//
+
+export interface Negotiated {
+	// the rule that matched, as written in choices, wildcards included
+	rule: string
+	match: string
+	q: number
+	type?: string
+	subtype?: string
+	suffix?: string
+	// the value choices held for rule, the object form only
+	o?: any
+	[param: string]: any
+}
+
+export type Negotiator = (header?: string | null) => Negotiated | null
+
+export function accept(choices: string | readonly string[]): Negotiator
+export function accept<T>(choices: Record<string, T>): (header?: string | null) => (Negotiated & { o: T }) | null
+
+//
 // event.mjs
 //
 
