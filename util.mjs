@@ -25,7 +25,11 @@ var UNDEF
 		else for (key in arr) if (hasOwn(arr, key)) fn.call(scope, arr[key], key, arr)
 	}
 }
-, fail = msg => { throw Error(msg) }
+, fail = (err, code) => {
+	err = Error(err)
+	err.code = code
+	throw err
+}
 , getProto = Object.getPrototypeOf
 , setProto = Object.setPrototypeOf
 , hasOwn = Object.hasOwn

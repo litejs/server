@@ -68,6 +68,11 @@ describe('util.mjs', () => {
 
 	test('fail', (assert) => {
 		assert.throws(() => fail('bad name'))
+		try {
+			fail('Payload Too Large', 413)
+		} catch (e) {
+			assert.equal([e.message, e.code], ['Payload Too Large', 413])
+		}
 		assert.end()
 	})
 

@@ -15,6 +15,7 @@ export default [{
 			crypto: 'readonly',
 			Deno: 'readonly',
 			fetch: 'readonly',
+			File: 'readonly',
 			Headers: 'readonly',
 			process: 'readonly',
 			ReadableStream: 'readonly',
@@ -27,6 +28,7 @@ export default [{
 			TextEncoder: 'readonly',
 			tjs: 'readonly',
 			URL: 'readonly',
+			URLSearchParams: 'readonly',
 			WebSocketPair: 'readonly'
 		}
 	},

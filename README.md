@@ -83,6 +83,33 @@ Routes match against `path`, the raw, percent-encoded pathname;
  - `pub/\{x}` matches the literal path `pub/{x}`
 
 
+### Request body
+
+Parse `application/json`, `application/x-www-form-urlencoded` and `multipart/form-data` into object, with `a[]=1&b[c]=2` syntax.
+Multipart is read from the req.body one part at a time.
+
+```javascript
+import { content } from "@litejs/server"
+
+app.post("upload", async (req, env) => {
+    // Each file arrives as a File, capped by maxFileSize; a Blob carries its length, which R2 put needs
+    const { title, file } = await content(req)
+    await env.BUCKET.put(file.name, file, { httpMetadata: { contentType: file.type } })
+    return { title, key: file.name }
+})
+```
+
+To keep a large file out of memory, handle the part yourself:
+`content(req, { file: part => upload(part.body).then(() => part.filename) })`.
+The handler runs for each file part in order and its return value takes the file's place in the body.
+A part has `name`, `filename`, `type`, `headers` and `body`,
+a `ReadableStream` that must be consumed before the next part is read;
+what a handler leaves unread is dropped.
+Limits `maxBodySize`, `maxFields`, `maxFieldSize`, `maxFiles` and `maxFileSize` throw a `413`,
+an unknown type a `415`.
+More types go in `accept`, an `accept()` rule to parser map merged over the built-in ones:
+`{ accept: { "text/csv;header=": (str, negod) => ... } }`.
+
 ### Runtime environments
 
 More complex setups require manually configured environments.

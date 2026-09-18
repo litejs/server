@@ -17,7 +17,7 @@ export function Data<T extends object = Record<string, unknown>>(obj?: T, proto?
 export function each(arr: string | null | undefined, fn: (value: string, key: number, arr: string[]) => void, scope?: unknown): void
 export function each<T>(arr: T[] | null | undefined, fn: (value: T, key: number, arr: T[]) => void, scope?: unknown): void
 export function each<T>(arr: Record<string, T> | null | undefined, fn: (value: T, key: string, arr: Record<string, T>) => void, scope?: unknown): void
-export function fail(msg?: string): never
+export function fail(err?: string, code?: number): never
 export const getProto: typeof Object.getPrototypeOf
 export const hasOwn: typeof Object.hasOwn
 export function header(src: { headers?: Headers | { get(name: string): string | null } } | null | undefined, name: string): string
@@ -124,6 +124,36 @@ export type Negotiator = (header?: string | null) => Negotiated | null
 
 export function accept(choices: string | readonly string[]): Negotiator
 export function accept<T>(choices: Record<string, T>): (header?: string | null) => (Negotiated & { o: T }) | null
+
+//
+// content.mjs
+//
+
+export interface Part extends Negotiated {
+	name: string
+	// empty for a plain field
+	filename: string
+	type?: string
+	headers: Record<string, string>
+	// must be consumed before the next part is requested
+	body: ReadableStream<Uint8Array>
+}
+
+export interface ContentOptions {
+	// extra media types, rule -> parser, merged over the built-in json, urlencoded and multipart rules
+	accept?: Record<string, (body: string, negotiated: Negotiated) => any>
+	// called for each file part in order; the return value is stored in the body under the field name
+	// by default the part is read into a File, capped by maxFileSize
+	file?: (part: Part) => any
+	maxBodySize?: number
+	maxFields?: number
+	maxFieldSize?: number
+	maxFiles?: number
+	maxFileSize?: number
+}
+
+export function content(req: Request, opts?: ContentOptions): Promise<any>
+export function querystring(str?: string | null): Record<string, any>
 
 //
 // event.mjs
