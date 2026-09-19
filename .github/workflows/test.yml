@@ -54,7 +54,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - uses: denoland/setup-deno@v2
-    - run: deno install
+    - run: deno install --min-dep-age 0
     - run: deno run -A node_modules/@litejs/cli/cli.js t 'test/*.mjs'
   E2E:
     runs-on: ubuntu-latest
