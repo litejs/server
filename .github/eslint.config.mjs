@@ -26,6 +26,7 @@ export default [{
 			skipWaiting: 'readonly',
 			TextDecoder: 'readonly',
 			TextEncoder: 'readonly',
+			TransformStream: 'readonly',
 			tjs: 'readonly',
 			URL: 'readonly',
 			URLSearchParams: 'readonly',

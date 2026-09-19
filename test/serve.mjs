@@ -96,6 +96,7 @@ describe('serveRange', () => {
 	var body = '0123456789'
 	, full = () => new Response(body, { headers: { 'content-length': '10', 'content-type': 'text/plain' } })
 	, get = headers => new Request('http://localhost/f', { headers })
+	, settle = () => new Promise(resolve => setTimeout(resolve))
 
 	it('serves {0} as bytes {1}', [
 		['bytes=0-3', '0-3/10', '0123'],
@@ -137,6 +138,69 @@ describe('serveRange', () => {
 		assert.strictEqual(await serveRange(get({ range: 'bytes=0-1' }), unsized), unsized, 'unknown content-length')
 		var bodyless = new Response(null, { headers: { 'content-length': '10' } })
 		assert.strictEqual(await serveRange(get({ range: 'bytes=0-1' }), bodyless), bodyless, 'a length with no body')
+	})
+
+	it('slices {0} across chunk boundaries as {1}', [
+		[ 'bytes=2-9', '23456789' ], // starts mid-chunk, ends mid-chunk
+		[ 'bytes=0-3', '0123' ],     // exactly the first chunk
+		[ 'bytes=4-7', '4567' ],     // exactly a middle chunk
+		[ 'bytes=9-11', '9ab' ],     // skips whole chunks, runs to the end
+	], async (range, expected, assert) => {
+		var enc = new TextEncoder()
+		, chunked = new Response(new ReadableStream({
+			start(ctrl) {
+				['0123', '4567', '89ab'].forEach(c => ctrl.enqueue(enc.encode(c)))
+				ctrl.close()
+			}
+		}), { headers: { 'content-length': '12' } })
+		, res = await serveRange(get({ range }), chunked)
+		assert.equal(await res.text(), expected)
+	})
+
+	test('reads only the requested window, never the whole body', async (assert) => {
+		var pulled = 0
+		, cancelled = 0
+		, chunks = 4096
+		// 4 MiB in 1 KiB chunks; buffering all of it to serve 10 bytes was the bug.
+		, huge = new Response(new ReadableStream({
+			pull(ctrl) {
+				if (pulled++ < chunks) return ctrl.enqueue(new Uint8Array(1024))
+				ctrl.close()
+			},
+			cancel() { cancelled++ }
+		}), { headers: { 'content-length': '' + chunks * 1024 } })
+		, res = await serveRange(get({ range: 'bytes=0-9' }), huge)
+		assert.equal(res.status, 206)
+		assert.equal((await res.arrayBuffer()).byteLength, 10, 'only the window is delivered')
+		assert.ok(pulled < 4, 'the source is read a chunk at a time, got ' + pulled)
+		// The pipe releases the source a tick after the consumer sees the end
+		await settle()
+		assert.equal(cancelled, 1, 'the source is cancelled once the window is served')
+	})
+
+	test('a client going away mid-range cancels the source', async (assert) => {
+		var cancelled = 0
+		, sent = 0
+		, src = new Response(new ReadableStream({
+			pull(ctrl) { sent++ < 64 ? ctrl.enqueue(new Uint8Array(8)) : ctrl.close() },
+			cancel() { cancelled++ }
+		}), { headers: { 'content-length': '512' } })
+		, res = await serveRange(get({ range: 'bytes=0-511' }), src)
+		, reader = res.body.getReader()
+		await reader.read()
+		await reader.cancel()
+		await settle()
+		assert.equal(cancelled, 1, 'the upstream body is released, not left open')
+	})
+
+	test('a source shorter than its content-length ends the slice', async (assert) => {
+		// The file shrank after stat; serve what is there rather than hanging.
+		var enc = new TextEncoder()
+		, short = new Response(new ReadableStream({
+			start(ctrl) { ctrl.enqueue(enc.encode('012345')), ctrl.close() }
+		}), { headers: { 'content-length': '12' } })
+		, res = await serveRange(get({ range: 'bytes=0-11' }), short)
+		assert.equal(await res.text(), '012345', 'the stream ends where the body ends')
 	})
 })
 
