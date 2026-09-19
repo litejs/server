@@ -27,6 +27,7 @@ import {
 	hide,
 	isObj,
 	listen,
+	env as sharedEnv,
 	loadEnv,
 	migrate,
 	off,
@@ -70,11 +71,12 @@ const routeMatch: RegExpExecArray | "" | null = app.routers.GET.match({} as Serv
 const db = new DB(":memory:")
 const kv = KV(db, "kv")
 const r2 = R2(db, "r2")
-const env = loadEnv(false, {
-	ASSETS: serveStatic("public"),
-	KV: kv,
-	R2: r2,
-})
+loadEnv(false)
+const env = sharedEnv
+env.ASSETS = serveStatic("public")
+env.KV = kv
+env.R2 = r2
+const shape: { fetch(req: Request): Promise<Response> } = env.ASSETS
 
 class Counter extends DO {
 	static schema = ["CREATE TABLE counter (id INTEGER PRIMARY KEY, value INTEGER)"]
@@ -139,7 +141,7 @@ const num: number | null = toNum("5min")
 const encoded: string = b64Url("data")
 const digest: string = hex(new Uint8Array([1, 2]))
 
-type ExpectServerName = Expect<Equal<typeof env.SERVER_NAME, string>>
+type ExpectSharedEnv = Expect<Equal<typeof env, Env>>
 type ExpectServer = Expect<Equal<typeof server, Server>>
 type ExpectCounter = Expect<Equal<typeof counter, Counter>>
 type ExpectByName = Expect<Equal<typeof byName, Counter>>

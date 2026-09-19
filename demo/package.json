@@ -19,6 +19,15 @@
     "vercel:deploy": "npx vercel deploy --prod --yes --project prj_9PBWAxilrjSCpHXh8i80McRiwHgI --scope team_rikNGVyzKh84IjJDUtuZYGD6",
     "vercel:run": "npx vercel dev --local --listen 127.0.0.1:3000"
   },
+  "imports": {
+    "#env": {
+      "workerd": "./env-none.mjs",
+      "fastly": "./env-none.mjs",
+      "vercel": "./env-none.mjs",
+      "netlify": "./env-none.mjs",
+      "default": "./env-local.mjs"
+    }
+  },
   "dependencies": {
     "@litejs/server": "file:.."
   },

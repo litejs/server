@@ -183,7 +183,8 @@ export interface Server {
 }
 
 export function serve(app: Handler, env?: Env): Server
-export function loadEnv(file?: string | false, rest?: Env): Env & { SERVER_NAME: string }
+export const env: Env
+export function loadEnv(file?: string | false): void
 export function readFiles(dir: string, root?: string, ext?: string): string[]
 export function readCert(env: Env): { key: string, cert: string } | false | undefined
 export function httpsRedirect(env: Env): (req: Request) => Response
@@ -198,7 +199,7 @@ export type FetchHandler = (req: Request, env?: Env, ctx?: Ctx) => Promise<Respo
 // What the host wants as its module default: { fetch } on Cloudflare and Vercel,
 // the handler itself on Netlify, a controller on Node.js, Bun, and Deno,
 // or nothing where the runtime registers its own listener.
-export function Server(app: Handler, dir?: string): FetchHandler | { fetch: FetchHandler } | Server | void
+export function Server(app: Handler): FetchHandler | { fetch: FetchHandler } | Server | void
 
 //
 // lib/serve.mjs

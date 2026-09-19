@@ -112,12 +112,11 @@ More types go in `accept`, an `accept()` rule to parser map merged over the buil
 
 ### Runtime environments
 
-More complex setups require manually configured environments.
-For example, `env.KV` is provided natively on Cloudflare but must be configured for local runtimes.
+Handlers receive `env` as their second argument.
+On Cloudflare it is the platform env with the bindings, elsewhere it is a plain object you must fill.
 
-Runtime-specific environments can be selected in several ways.
-One option is to use a separate entry file for each runtime.
-Another is to use conditional imports in `package.json`, allowing runtimes to share an entry point:
+For example, Cloudflare provided `env.ASSETS` and `env.KV` needs a shim locally.
+Keep that wiring in a conditional import in `package.json`, so every runtime shares the entry point:
 
 ```json
 {
@@ -130,34 +129,38 @@ Another is to use conditional imports in `package.json`, allowing runtimes to sh
 }
 ```
 
-Configure `ASSETS` and `KV` bindings in `wrangler.jsonc` for Cloudflare.
-On local runtimes, `serveStatic` provides `ASSETS`, while a SQLite-backed shim provides `KV`.
+`env/workerd.mjs` may be an empty file if no custom env needed.
 
 ```javascript
 // env/workerd.mjs
-export { env } from "cloudflare:workers"
+import { env } from "@litejs/server"
+// Add custom env value to use later
+env.RUNTIME = "Cloudflare"
 ```
+
+The local file appends `.env.json` and the process environment with `loadEnv()`,
+then adds what the platform would have bound:
 
 ```javascript
 // env/local.mjs
-import { DB, KV, serveStatic } from "@litejs/server"
-var db = new DB(":memory:")
-, env = {
-	ASSETS: serveStatic("public"),
-	KV: KV(db, "kv"),
-}
-export { env }
+import { DB, KV, env, loadEnv, serveStatic } from "@litejs/server"
+
+loadEnv(".env.json")
+env.ASSETS = serveStatic("public")
+env.KV = KV(new DB(env.DB_PATH || ":memory:"), "kv")
+env.RUNTIME = "local"
 ```
 
-The same server entry point runs on Cloudflare, Bun, Deno, Node.js, and txiki.js:
+Call `loadEnv()` to read the process environment alone.
+The same server entry point then runs on Cloudflare, Bun, Deno, Node.js, and txiki.js:
 
 ```javascript
 // server.mjs
 import { Server } from "@litejs/server"
-import { env } from "#env"
+import "#env"
 import { app } from "./app.mjs"
 
-export default Server(app, env)
+export default Server(app)
 ```
 
 

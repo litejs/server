@@ -4,8 +4,8 @@
 // env is assembled by hand and the DO directory is a fixed relative path that
 // run:txiki creates.
 //
-// serve() rather than Server(), because Server(app, dir) takes a static root
-// and this fixture has to pass its own bindings through as the env.
+// serve() rather than Server(), so the fixture hands its own env through
+// instead of the shared one.
 
 import {
 	DB, KV, R2, S3, durableObject, serve, serveStatic

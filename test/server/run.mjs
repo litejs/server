@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-	DB, KV, R2, S3, durableObject, loadEnv, serve, serveStatic, setupShutdown
+	DB, KV, R2, S3, durableObject, env, loadEnv, serve, serveStatic, setupShutdown
 } from '../../index.mjs'
 import app from './app.mjs'
 import { Counter } from './counter.mjs'
@@ -12,11 +12,10 @@ import { Counter } from './counter.mjs'
 const db = new DB(':memory:')
 const doDir = mkdtempSync(join(tmpdir(), 'litejs-do-'))
 // .env.json is git-ignored and local-only; on CI the values come from process.env.
-const env = loadEnv(existsSync('.env.json') && '.env.json', {
-	ASSETS: serveStatic("public"),
-	KV: KV(db, 'kv'),
-	R2: R2(db, 'r2'),
-})
+loadEnv(existsSync('.env.json') && '.env.json')
+env.ASSETS = serveStatic("public")
+env.KV = KV(db, 'kv')
+env.R2 = R2(db, 'r2')
 env.COUNTER = durableObject(Counter, doDir, env)
 // Real S3 client, wired only when credentials are present (CI secrets or .env.json).
 if (env.S3_AWS_ID && env.S3_AWS_SECRET) env.S3 = S3({

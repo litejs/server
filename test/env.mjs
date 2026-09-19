@@ -3,48 +3,97 @@ import '@litejs/cli/test.js'
 import { writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { App, httpsRedirect, readCert, readFiles, loadEnv, localServer, setupShutdown, worker } from '../index.mjs'
+import { App, env, httpsRedirect, readCert, readFiles, loadEnv, serveStatic, setupShutdown, worker } from '../index.mjs'
+import { localServer } from '../lib/env.mjs'
 
 var stubbable = typeof Bun === 'undefined' && typeof Deno === 'undefined'
 
+// The shared env survives across tests; every test starts it as created.
+var initial = { ...env }
+, reset = () => {
+	for (var key in env) delete env[key]
+	Object.assign(env, initial)
+}
+
+describe('env', () => {
+	test('carries the local defaults from creation', assert => {
+		assert.equal(initial, { BIND_ADDR: '0.0.0.0', HOSTNAME: '127.0.0.1', PORT: 8080 })
+		assert.end()
+	})
+})
+
 describe('loadEnv', () => {
-	test('merges layers and locks precedence: defaults < file < process.env < rest', (assert, mock) => {
+	test('fills the shared env and locks precedence: existing < file < process.env', (assert, mock) => {
 		// Resolve tmpdir() before swapping process.env
 		var file = join(tmpdir(), 'litejs-env-' + Date.now() + '.json')
-		mock.swap(process, 'env', { PORT: 9090, ENV_ONLY: 'env', BOTH: 'env', ALL: 'env' })
-		writeFileSync(file, JSON.stringify({ HOSTNAME: 'example.com', FILE_ONLY: 'file', BOTH: 'file', ALL: 'file' }))
+		mock.swap(process, 'env', { PORT: 9090, ENV_ONLY: 'env', BOTH: 'env' })
+		writeFileSync(file, JSON.stringify({ HOSTNAME: 'example.com', FILE_ONLY: 'file', BOTH: 'file' }))
+		reset()
+		env.HOSTNAME = 'existing.example'
+		env.KV = 'binding'
 		try {
-			var env = loadEnv(file, { ALL: 'rest', EXTRA: 'rest-wins' })
-			assert.equal(env.BIND_ADDR, '0.0.0.0', 'keeps defaults')
+			assert.equal(loadEnv(file), undefined, 'fills the shared object, returns nothing')
+			assert.equal(env.BIND_ADDR, '0.0.0.0', 'keeps a default nothing overrides')
+			assert.equal(env.KV, 'binding', 'a value set before the load is kept')
 			assert.equal(env.PORT, 9090, 'process.env overrides defaults')
-			assert.equal(env.HOSTNAME, 'example.com', 'file overrides defaults')
+			assert.equal(env.HOSTNAME, 'example.com', 'file overrides an existing value')
 			assert.equal(env.SERVER_NAME, 'http://example.com:9090', 'SERVER_NAME uses the resolved host and port')
 			assert.equal(env.FILE_ONLY, 'file', 'file is applied')
 			assert.equal(env.ENV_ONLY, 'env', 'process.env is applied')
 			assert.equal(env.BOTH, 'env', 'process.env overrides the file')
-			assert.equal(env.ALL, 'rest', 'rest overrides process.env and the file')
-			assert.equal(env.EXTRA, 'rest-wins', 'rest is applied')
 		} finally {
 			rmSync(file)
+			reset()
 		}
 		assert.end()
 	})
 
-	test('works without a file or overrides', (assert, mock) => {
+	test('works without a file', (assert, mock) => {
 		mock.swap(process, 'env', {})
-		var env = loadEnv()
+		reset()
+		loadEnv()
 		assert.equal(env.BIND_ADDR, '0.0.0.0')
 		assert.equal(env.HOSTNAME, '127.0.0.1')
 		assert.equal(env.PORT, 8080)
 		assert.equal(env.SERVER_NAME, 'http://127.0.0.1:8080')
+		reset()
+		assert.end()
+	})
+
+	test('throws on a missing file', (assert, mock) => {
+		mock.swap(process, 'env', {})
+		reset()
+		assert.throws(() => loadEnv(join(tmpdir(), 'litejs-env-missing-' + Date.now() + '.json')), 'a named file has to exist')
+		reset()
+		assert.end()
+	})
+
+	test('is idempotent, so Server() may load after the app did', (assert, mock) => {
+		mock.swap(process, 'env', {})
+		reset()
+		env.PORT = 3000
+		loadEnv()
+		assert.equal(env.PORT, 3000, 'a loaded value survives a second load')
+		assert.equal(env.SERVER_NAME, 'http://127.0.0.1:3000', 'SERVER_NAME is not recomputed from the defaults')
+		reset()
 		assert.end()
 	})
 
 	test('SERVER_NAME is the https origin when HTTPS is configured', (assert, mock) => {
 		mock.swap(process, 'env', {})
-		assert.equal(loadEnv({ HTTPS_KEY: 'k', HTTPS_CERT: 'c', HTTPS_PORT: 444 }).SERVER_NAME, 'https://127.0.0.1:444')
-		assert.equal(loadEnv(null, { HTTPS_KEY: 'k', HTTPS_CERT: 'c' }).SERVER_NAME, 'https://127.0.0.1:8443', 'HTTPS_PORT defaults to 8443')
-		assert.equal(loadEnv(null, { HTTPS_KEY: 'k' }).SERVER_NAME, 'http://127.0.0.1:8080', 'key alone does not switch the scheme')
+		reset()
+		Object.assign(env, { HTTPS_KEY: 'k', HTTPS_CERT: 'c', HTTPS_PORT: 444 })
+		loadEnv()
+		assert.equal(env.SERVER_NAME, 'https://127.0.0.1:444')
+		reset()
+		Object.assign(env, { HTTPS_KEY: 'k', HTTPS_CERT: 'c' })
+		loadEnv()
+		assert.equal(env.SERVER_NAME, 'https://127.0.0.1:8443', 'HTTPS_PORT defaults to 8443')
+		reset()
+		env.HTTPS_KEY = 'k'
+		loadEnv()
+		assert.equal(env.SERVER_NAME, 'http://127.0.0.1:8080', 'key alone does not switch the scheme')
+		reset()
 		assert.end()
 	})
 })
@@ -104,37 +153,65 @@ describe('worker', () => {
 })
 
 describe('localServer', () => {
-	test('mounts the static root last and returns the serve() controller', async (assert, mock) => {
+	test('serves the shared env and returns the serve() controller', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		mock.swap(process, 'env', {})
 		mock.swap(process, 'on', () => {}) // setupShutdown must not touch the test runner
+		reset()
 
 		// Every runtime hands localServer its own serve(); this one only records.
 		var calls = []
 		, serve = (app, env) => (calls.push({ env, fetch: worker(app, env) }), { name: env.SERVER_NAME, close() {} })
 		, Server = localServer(serve)
-		, app = App()
+		// Static files come from the ASSETS binding on a route miss, as on Cloudflare.
+		, app = App({ notFound: (req, env) => env.ASSETS?.fetch(req) ?? 404 })
 		app.get('x', () => 'own route')
+		app.get('late', (req, env) => env.LATE)
 
-		var server = Server(app, join(import.meta.dirname, 'fixtures'))
-		assert.equal(calls[0].env.PORT, 8080, 'PORT comes from loadEnv, not from the caller')
+		env.ASSETS = serveStatic(join(import.meta.dirname, 'fixtures'))
+		var server = Server(app)
+		assert.equal(calls[0].env, env, 'serve() gets the shared env itself')
+		assert.equal(env.PORT, 8080, 'Server() loads the defaults')
 		assert.equal(typeof server.close, 'function', 'hands back the serve() controller')
 
 		var routed = await calls[0].fetch(new Request('http://localhost/x'))
-		assert.equal(await routed.text(), 'own route', 'the app own routes still win')
+		assert.equal(await routed.text(), 'own route', 'the app own routes win')
 
 		var asset = await calls[0].fetch(new Request('http://localhost/tls1.crt'))
-		assert.equal(asset.status, 200, 'the static root is served under them')
+		assert.equal(asset.status, 200, 'a route miss is answered from ASSETS')
 
 		var miss = await calls[0].fetch(new Request('http://localhost/nope'))
-		assert.equal(miss.status, 404, 'a static miss is the 404')
+		assert.equal(miss.status, 404, 'an ASSETS miss is the 404')
 
-		// Without a directory nothing is mounted, so the app alone answers.
-		var bare = App()
-		bare.get('y', () => 'bare')
-		Server(bare)
-		assert.equal(await (await calls[1].fetch(new Request('http://localhost/y'))).text(), 'bare')
-		assert.equal((await calls[1].fetch(new Request('http://localhost/tls1.crt'))).status, 404, 'no static root without a dir')
+		// A binding wired after Server() still reaches the handler.
+		env.LATE = 'late-binding'
+		assert.equal(await (await calls[0].fetch(new Request('http://localhost/late'))).text(), 'late-binding')
+
+		// Without ASSETS the same notFound falls through to a plain 404.
+		reset()
+		Server(app)
+		assert.equal((await calls[1].fetch(new Request('http://localhost/tls1.crt'))).status, 404, 'no static files without ASSETS')
+		reset()
+	})
+
+	test('EXIT_TIME sets the shutdown grace', async (assert, mock) => {
+		mock.swap(console, 'log', () => {})
+		mock.swap(process, 'env', {})
+		mock.time()
+		var handlers = {}
+		, exited = 0
+		mock.swap(process, 'on', (name, fn) => { handlers[name] = fn })
+		mock.swap(process, 'exit', () => { exited++ })
+		reset()
+
+		env.EXIT_TIME = 100
+		localServer(() => ({ close() {} }))(App())
+		handlers.SIGTERM()
+		mock.tick(99)
+		assert.equal(exited, 0, 'still draining before EXIT_TIME')
+		mock.tick(1)
+		assert.equal(exited, 1, 'force-exits at EXIT_TIME')
+		reset()
 	})
 })
 

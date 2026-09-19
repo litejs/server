@@ -244,7 +244,7 @@ describe('service-worker adapter', () => {
 		})
 	})
 
-	test('Server() registers the fetch event, ignoring any static root', async (assert, mock) => {
+	test('Server() registers the fetch event', async (assert, mock) => {
 		var app = App()
 		app.get('sw', () => 'sw-ok')
 
@@ -253,7 +253,7 @@ describe('service-worker adapter', () => {
 		mock.swap(globalThis, 'skipWaiting', () => {})
 		mock.swap(globalThis, 'clients', { claim: () => 'claim-token' })
 
-		assert.equal(ServerSW(app, 'public'), undefined, 'there is no module shape to return')
+		assert.equal(ServerSW(app), undefined, 'there is no module shape to return')
 
 		var responded
 		handlers.fetch({ request: new Request('http://localhost/sw'), respondWith: (p) => { responded = p } })

@@ -1,10 +1,13 @@
 
 // Demo server deployed to several providers by CI
 
+import '#env'
 import { App, Server } from '@litejs/server'
 import { COMMIT, RUNTIME } from './info.mjs'
 
-var app = App()
+// Static files come from the ASSETS binding on a route miss:
+// wrangler.jsonc on Cloudflare, env-local.mjs where the runtime has a disk.
+var app = App({ notFound: (req, env) => env.ASSETS?.fetch(req) ?? 404 })
 , page = runtime => `<!doctype html>
 <html lang="en">
 <head>
@@ -45,8 +48,5 @@ app.post('echo', async req => ({ echo: await req.text() }))
 
 app.get('teapot', req => (req.resStatus = 418, 'no coffee'))
 
-// fastly:build warns "import.meta is not available with the iife output
-// format" because js-compute-runtime re-bundles as iife. Expected: the value
-// is only read by the runtimes that have a disk, and Fastly is not one.
-export default Server(app, import.meta.dirname + '/public')
+export default Server(app)
 
