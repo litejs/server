@@ -89,6 +89,25 @@ describe('node adapter', !skip && (() => {
 		}
 	})
 
+	test('sends every Set-Cookie line', async (assert, mock) => {
+		mock.swap(console, 'log', () => {})
+		var app = App()
+		app.get('res-headers', req => (req.resHeaders['set-cookie'] = 'a=1', req.resHeaders['Set-Cookie'] = 'b=2', 'ok'))
+		app.get('response', () => new Response('ok', { headers: [['set-cookie', 'a=1'], ['set-cookie', 'b=2']] }))
+
+		var port = 18729
+		, base = 'http://127.0.0.1:' + port
+		, server = await serveNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		try {
+			var res = await untilReady(() => fetch(base + '/res-headers'))
+			assert.equal(res.headers.getSetCookie(), ['a=1', 'b=2'])
+			res = await fetch(base + '/response')
+			assert.equal(res.headers.getSetCookie(), ['a=1', 'b=2'])
+		} finally {
+			server.close()
+		}
+	})
+
 	test('serve returns a { name, close } controller', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		// Omit HOSTNAME and BIND_ADDR to exercise their defaults.
