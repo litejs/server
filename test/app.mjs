@@ -381,7 +381,7 @@ describe('router', () => {
 		.equal(actualParam, expectedParam)
 	})
 
-	test('handler result is returned verbatim; the worker shapes it', [
+	test('handler result is returned verbatim; toHandler() shapes it', [
 		[() => 'sync', 'sync'],
 		[async () => 'async', 'async'],
 		['literal-value', 'literal-value'],
@@ -412,7 +412,7 @@ describe('router', () => {
 		assert.equal(called[2], 'handler')
 	})
 
-	test('errors propagate to the caller; the worker maps them', [
+	test('errors propagate to the caller; toHandler() maps them', [
 		[r => r.add('e', async () => { throw new Error('async') }), undefined],
 		[r => { r.use(async () => { throw new Error('mw') }); r.add('e', () => 'ok') }, undefined],
 		[r => r.add('e', () => { var er = new Error('gone'); er.code = 410; throw er }), 410],
@@ -421,7 +421,7 @@ describe('router', () => {
 		setup(r2)
 		var err = await handle(r2, createReq('e')).then(() => null, e => e)
 		assert.ok(err instanceof Error, 'router rethrows instead of swallowing')
-		assert.equal(err.code, expectedCode, 'e.code is preserved for the worker to map')
+		assert.equal(err.code, expectedCode, 'e.code is preserved for toHandler() to map')
 	})
 
 	test('middleware short-circuits when returning a value', async (assert) => {

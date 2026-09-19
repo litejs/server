@@ -68,7 +68,7 @@ describe('smoke ' + base, () => {
 
 	test('GET //info does not keep the double slash', async assert => {
 		var res = await get('//info', { redirect: 'manual' })
-		// worker() answers 301 to the collapsed path.
+		// toHandler() answers 301 to the collapsed path.
 		// Some edges collapse it to 200, or their own 308 instead of the 301.
 		assert.ok([ 200, 301, 308 ].includes(res.status), 'status is 200, 301 or 308, got ' + res.status)
 		// Relative here, absolute from some edges — only the path is the point.

@@ -189,7 +189,6 @@ export function readFiles(dir: string, root?: string, ext?: string): string[]
 export function readCert(env: Env): { key: string, cert: string } | false | undefined
 export function httpsRedirect(env: Env): (req: Request) => Response
 export function setupShutdown(servers: Server | Server[], opts?: { exitTime?: number, onReload?: () => void }): void
-export function worker(app: Handler, env?: Env): (req: Request, env?: Env, ctx?: Ctx) => Promise<Response>
 
 //
 // Server() - one entrypoint per app, resolved by #runtime

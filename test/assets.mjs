@@ -41,7 +41,7 @@ describe('serveAssets', () => {
 	})
 
 	test('a miss is notFound, 404 by default', async assert => {
-		assert.equal(await get(serveAssets(files), '/nope'), 404, 'a bare 404 for the worker to shape')
+		assert.equal(await get(serveAssets(files), '/nope'), 404, 'a bare 404 for toHandler() to shape')
 		assert.equal(await get(serveAssets(files, { notFound: () => 'gone' }), '/nope'), 'gone')
 	})
 })

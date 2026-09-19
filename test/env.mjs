@@ -3,8 +3,9 @@ import '@litejs/cli/test.js'
 import { writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { App, env, httpsRedirect, readCert, readFiles, loadEnv, serveStatic, setupShutdown, worker } from '../index.mjs'
+import { App, env, httpsRedirect, readCert, readFiles, loadEnv, serveStatic, setupShutdown } from '../index.mjs'
 import { localServer } from '../lib/env.mjs'
+import { toHandler } from '../lib/serve.mjs'
 
 var stubbable = typeof Bun === 'undefined' && typeof Deno === 'undefined'
 
@@ -143,15 +144,6 @@ describe('httpsRedirect', () => {
 	})
 })
 
-describe('worker', () => {
-	test('hands the handler a ctx whose waitUntil is a no-op off Workers', async assert => {
-		var app = App()
-		app.get('defer', (req, env, ctx) => (ctx.waitUntil(Promise.resolve()), 'deferred'))
-		var res = await worker(app)(new Request('http://localhost/defer'))
-		assert.equal(await res.text(), 'deferred')
-	})
-})
-
 describe('localServer', () => {
 	test('serves the shared env and returns the serve() controller', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
@@ -161,7 +153,7 @@ describe('localServer', () => {
 
 		// Every runtime hands localServer its own serve(); this one only records.
 		var calls = []
-		, serve = (app, env) => (calls.push({ env, fetch: worker(app, env) }), { name: env.SERVER_NAME, close() {} })
+		, serve = (app, env) => (calls.push({ env, fetch: toHandler(app, env) }), { name: env.SERVER_NAME, close() {} })
 		, Server = localServer(serve)
 		// Static files come from the ASSETS binding on a route miss, as on Cloudflare.
 		, app = App({ notFound: (req, env) => env.ASSETS?.fetch(req) ?? 404 })

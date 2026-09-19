@@ -1,7 +1,7 @@
 
 import '@litejs/cli/test.js'
 import { App } from '../index.mjs'
-import { DurableObject, Server as ServerSW, env as envSW, serve as serveSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
+import { DurableObject, Server as ServerSW, env as envSW, serve as serveSW, serveCache } from '../lib/browser.mjs'
 import { Server as ServerFastly, env as envFastly } from '../lib/fastly.mjs'
 import * as vercel from '../lib/vercel.mjs'
 import * as netlify from '../lib/netlify.mjs'

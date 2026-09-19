@@ -42,7 +42,6 @@ import {
 	startCron,
 	toNum,
 	unlisten,
-	worker
 } from "@litejs/server"
 
 type Equal<A, B> =
@@ -110,9 +109,6 @@ const server = serve(app, env)
 const cron = startCron("*/5 * * * *", (controller, env, ctx) => controller.scheduledTime)
 setupShutdown([server, cron])
 
-const fetchHandler = worker(app, env)
-const res: Promise<Response> = fetchHandler(new Request("http://localhost/"))
-
 const emitter = {}
 const owner = {}
 on(emitter, "change", (value: number) => value)
@@ -162,7 +158,6 @@ void rows
 void uploaded
 void presigned
 void verified
-void res
 void num
 void encoded
 void digest
