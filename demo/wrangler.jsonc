@@ -5,8 +5,7 @@
 	"compatibility_date": "2025-09-27",
 	"assets": {
 		"directory": "./public",
-		// Serve the paths as written, the default strips `.html` with a 307
-		"html_handling": "none"
+		"binding": "ASSETS"
 	},
 	"observability": {
 		"enabled": true

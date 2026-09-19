@@ -209,6 +209,14 @@ export function serveRange(req: Request, res: Response | Promise<Response>): Pro
 export function serveStatic(baseDir?: string, opts?: { defaultMime?: string }): { fetch(req: Request): Promise<Response> }
 
 //
+// lib/assets.mjs
+//
+
+export const mime: Record<string, string>
+// Files bundled as text or bytes, keyed by leading-slash path, as lib/bin/lj-assets.mjs generates them
+export function serveAssets(files: Record<string, string | Uint8Array>, opts?: { defaultMime?: string, notFound?: () => HandlerResult }): { fetch(req: Request): HandlerResult }
+
+//
 // Platform primitives, each runtime's own, resolved from #runtime
 //
 

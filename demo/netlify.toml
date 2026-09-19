@@ -1,7 +1,11 @@
-
 [build]
 	command = "npm run netlify:build"
 
 [functions]
 	directory = "build/netlify"
 
+# Static files in public/ win over a rewrite, the function takes the rest.
+[[redirects]]
+	from = "/*"
+	to = "/.netlify/functions/index"
+	status = 200

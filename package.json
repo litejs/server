@@ -20,6 +20,9 @@
   "repository": "github:litejs/server",
   "main": "index.mjs",
   "types": "index.d.ts",
+  "bin": {
+    "lj-assets": "./lib/bin/lj-assets.mjs"
+  },
   "engines": {
     "node": ">=22.5"
   },
@@ -40,7 +43,7 @@
   "files": [
     "*.mjs",
     "*.d.ts",
-    "lib/*.mjs"
+    "lib/**/*.mjs"
   ],
   "scripts": {
     "bundle": "esbuild app.mjs --bundle --minify --format=esm --outfile=bundle.js",

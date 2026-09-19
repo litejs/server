@@ -3,26 +3,27 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "cloudflare:build": "esbuild app.mjs --bundle --format=esm --target=es2022 --conditions=workerd --external:cloudflare:* --outfile=build/cloudflare.mjs",
+    "build": "esbuild app.mjs --bundle --format=esm --target=es2022",
+    "cloudflare:build": "npm run -s build -- --conditions=workerd --external:cloudflare:* --outfile=build/cloudflare.mjs",
     "cloudflare:deploy": "wrangler deploy",
     "cloudflare:run": "wrangler dev",
-    "deno:build": "esbuild app.mjs --bundle --format=esm --target=es2022 --conditions=deno --platform=node --outfile=build/deno/main.mjs && rm -rf build/deno/public && cp -r public build/deno/public",
+    "deno:build": "npm run -s build -- --conditions=deno --platform=node --outfile=build/deno/main.mjs && rm -rf build/deno/public && cp -r public build/deno/public",
     "deno:deploy": "deno deploy --prod --non-interactive --org litejs --app litejs-server-demo build/deno",
     "deno:run": "deno run -A build/deno/main.mjs",
-    "fastly:build": "esbuild app.mjs --bundle --format=esm --target=es2022 --conditions=fastly --external:fastly:* --outfile=build/fastly.mjs && js-compute-runtime build/fastly.mjs bin/main.wasm",
+    "fastly:build": "node ../lib/bin/lj-assets.mjs public > assets.mjs && npm run -s build -- --conditions=fastly --external:fastly:* --loader:.html=text --loader:.js=text --outfile=build/fastly.mjs && js-compute-runtime build/fastly.mjs bin/main.wasm",
     "fastly:deploy": "fastly compute pack --wasm-binary bin/main.wasm && fastly compute deploy --non-interactive",
     "fastly:run": "fastly compute serve",
-    "netlify:build": "esbuild netlify.mjs --bundle --format=esm --target=es2022 --platform=node --conditions=netlify --outfile=build/netlify/index.mjs",
+    "netlify:build": "npm run -s build -- --conditions=netlify --platform=node --outfile=build/netlify/index.mjs",
     "netlify:deploy": "npx netlify-cli deploy --prod --json --site 2722e4b1-d26d-4ad8-81c2-a8444f8c33c5 --dir=public --functions=build/netlify",
     "netlify:run": "npx netlify-cli dev --offline --no-open --dir public --functions build/netlify",
-    "vercel:build": "esbuild app.mjs --bundle --format=esm --target=es2022 --platform=node --conditions=vercel --outfile=api/index.mjs",
+    "vercel:build": "npm run -s build -- --conditions=vercel --platform=node --outfile=api/index.mjs",
     "vercel:deploy": "npx vercel deploy --prod --yes --project prj_9PBWAxilrjSCpHXh8i80McRiwHgI --scope team_rikNGVyzKh84IjJDUtuZYGD6",
     "vercel:run": "npx vercel dev --local --listen 127.0.0.1:3000"
   },
   "imports": {
     "#env": {
       "workerd": "./env-none.mjs",
-      "fastly": "./env-none.mjs",
+      "fastly": "./env-fastly.mjs",
       "vercel": "./env-none.mjs",
       "netlify": "./env-none.mjs",
       "default": "./env-local.mjs"

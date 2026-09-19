@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>LiteJS Server &ndash; Service Worker ui-test</title>
+</head>
+<body>
+	<h1>Service Worker ui-test</h1>
+	<p>
+		Run headless with <code>npm run ui-test</code> in demo/.
+		The results go to the console, which is what <code>lj ui-test</code> reads.
+	</p>
+
+<script src="/test.js"></script>
+<script>
+/* global describe, test */
+
+// The static server behind `lj ui-test` has no app routes, so every check here
+// can only pass through the Service Worker.
+var win
+, ready = start()
+
+function start() {
+	if (!navigator.serviceWorker) return Promise.reject(new Error("no Service Worker support"))
+	return navigator.serviceWorker.register("/sw.js")
+	.then(function() {
+		return navigator.serviceWorker.ready
+	})
+	.then(function() {
+		// A client created after activation is controlled from the start, so
+		// this never races clients.claim() on the top-level page — which is
+		// what makes the run deterministic on a cold browser profile.
+		var frame = document.createElement("iframe")
+		frame.src = "/frame.html"
+		document.body.appendChild(frame)
+		return new Promise(function(resolve) { frame.onload = resolve })
+		.then(function() {
+			win = frame.contentWindow
+			if (!win.navigator.serviceWorker.controller) throw new Error("iframe is not controlled")
+		})
+	})
+}
+
+describe("service worker", function() {
+
+	test("GET /info reports the service worker", async function(assert) {
+		assert.setTimeout(20000)
+		await ready
+		var info = await (await win.fetch("/info?a=1")).json()
+		assert.equal(info.runtime, "service-worker", "runtime")
+		assert.equal(info.path, "/info", "path")
+		assert.equal(info.query, "a=1", "query")
+	})
+
+	test("GET /hello/{name} reads a route param", async function(assert) {
+		assert.setTimeout(20000)
+		await ready
+		assert.equal(await (await win.fetch("/hello/moon")).text(), "Hello moon", "body")
+	})
+
+	test("POST /echo round-trips the body", async function(assert) {
+		assert.setTimeout(20000)
+		await ready
+		var body = "echo-" + Math.random().toString(36).slice(2)
+		, res = await (await win.fetch("/echo", { method: "POST", body: body })).json()
+		assert.equal(res.echo, body, "body")
+	})
+
+	test("statuses come from the handlers", async function(assert) {
+		assert.setTimeout(20000)
+		await ready
+		assert.equal((await win.fetch("/teapot")).status, 418, "teapot")
+		assert.equal((await win.fetch("/nowhere")).status, 404, "nowhere")
+	})
+
+})
+</script>
+</body>
+</html>

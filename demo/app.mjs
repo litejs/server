@@ -1,37 +1,12 @@
 
 // Demo server deployed to several providers by CI
 
-import '#env'
 import { App, Server } from '@litejs/server'
+import '#env'
 import { COMMIT, RUNTIME } from './info.mjs'
 
-// Static files come from the ASSETS binding on a route miss:
-// wrangler.jsonc on Cloudflare, env-local.mjs where the runtime has a disk.
+// Static files, public/index.html included, come from the ASSETS binding.
 var app = App({ notFound: (req, env) => env.ASSETS?.fetch(req) ?? 404 })
-, page = runtime => `<!doctype html>
-<html lang="en">
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>LiteJS Server demo</title>
-</head>
-<body>
-	<h1>LiteJS Server</h1>
-	<p>Served by <strong>${runtime}</strong>.</p>
-	<p>One app, one entrypoint, five providers. Only Server() differs.</p>
-	<ul>
-		<li><a href="/info">/info</a></li>
-		<li><a href="/hello/moon">/hello/moon</a></li>
-		<li><a href="/teapot">/teapot</a></li>
-	</ul>
-</body>
-</html>
-`
-
-app.get('', req => (
-	req.resHeaders['content-type'] = 'text/html; charset=utf-8',
-	page(RUNTIME)
-))
 
 app.get('info', req => ({
 	runtime: RUNTIME,

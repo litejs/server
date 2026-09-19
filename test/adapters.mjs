@@ -1,7 +1,10 @@
 
 import '@litejs/cli/test.js'
 import { App } from '../index.mjs'
-import { DurableObject, Server as ServerSW, serve as serveSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
+import { DurableObject, Server as ServerSW, env as envSW, serve as serveSW, serveCache, worker as workerSW } from '../lib/browser.mjs'
+import { Server as ServerFastly, env as envFastly } from '../lib/fastly.mjs'
+import * as vercel from '../lib/vercel.mjs'
+import * as netlify from '../lib/netlify.mjs'
 import https from 'node:https'
 import net from 'node:net'
 import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
@@ -235,6 +238,45 @@ describe('node adapter', !skip && (() => {
 	})
 }))
 
+describe('function adapters', () => {
+	if (skip) return
+
+	test('{0}: Server() serves the shared env when the platform calls fetch without one', [
+		[ 'vercel', vercel, server => server.fetch ],
+		[ 'netlify', netlify, server => server ],
+	], async (name, runtime, fetchOf, assert) => {
+		var app = App()
+		app.get('fn', (req, env) => name + '-ok ' + env.SHARED)
+		assert.ok(runtime.env && runtime.env !== envFastly, 'exports the node-side shared env')
+		assert.equal(runtime.serve, undefined, 'no listener on a function host')
+
+		runtime.env.SHARED = 'binding'
+		var res = await fetchOf(runtime.Server(app))(new Request('http://localhost/fn'))
+		assert.equal(await res.text(), name + '-ok binding')
+		delete runtime.env.SHARED
+	})
+})
+
+describe('fastly adapter', () => {
+	if (skip) return
+
+	test('Server() registers the fetch event and serves the shared env', async (assert, mock) => {
+		var app = App()
+		app.get('edge', (req, env) => 'edge-ok ' + env.SHARED)
+
+		var handlers = {}
+		mock.swap(globalThis, 'addEventListener', (type, fn) => { handlers[type] = fn })
+
+		assert.equal(ServerFastly(app), undefined, 'there is no module shape to return')
+
+		var responded
+		envFastly.SHARED = 'binding'
+		handlers.fetch({ request: new Request('http://localhost/edge'), respondWith: (p) => { responded = p } })
+		assert.equal(await (await responded).text(), 'edge-ok binding', 'the app answers through the event with the shared env')
+		delete envFastly.SHARED
+	})
+})
+
 describe('service-worker adapter', () => {
 	if (skip) return
 
@@ -244,9 +286,9 @@ describe('service-worker adapter', () => {
 		})
 	})
 
-	test('Server() registers the fetch event', async (assert, mock) => {
+	test('Server() registers the fetch event and serves the shared env', async (assert, mock) => {
 		var app = App()
-		app.get('sw', () => 'sw-ok')
+		app.get('sw', (req, env) => 'sw-ok ' + env.SHARED)
 
 		var handlers = {}
 		mock.swap(globalThis, 'addEventListener', (type, fn) => { handlers[type] = fn })
@@ -256,8 +298,10 @@ describe('service-worker adapter', () => {
 		assert.equal(ServerSW(app), undefined, 'there is no module shape to return')
 
 		var responded
+		envSW.SHARED = 'binding'
 		handlers.fetch({ request: new Request('http://localhost/sw'), respondWith: (p) => { responded = p } })
-		assert.equal(await (await responded).text(), 'sw-ok', 'the app answers through the event')
+		assert.equal(await (await responded).text(), 'sw-ok binding', 'the app answers through the event with the shared env')
+		delete envSW.SHARED
 	})
 
 	test('serve wires install, activate and fetch to the worker', async (assert, mock) => {

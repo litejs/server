@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>LiteJS Server &ndash; Service Worker test</title>
+	<style>
+		:root { color-scheme: light dark }
+		body {
+			margin: 0 auto; padding: 2rem 1rem; max-width: 44rem;
+			font: 16px/1.5 system-ui, sans-serif;
+		}
+		h1 { font-size: 1.4rem }
+		#status { padding: .6rem .9rem; border-radius: .4rem; font-weight: 600 }
+		[data-state="pass"] #status { background: #d8f3dc; color: #1b4332 }
+		[data-state="fail"] #status { background: #ffd7d7; color: #6a040f }
+		[data-state="wait"] #status { background: #eee; color: #333 }
+		@media (prefers-color-scheme: dark) {
+			[data-state="pass"] #status { background: #1b4332; color: #d8f3dc }
+			[data-state="fail"] #status { background: #6a040f; color: #ffd7d7 }
+			[data-state="wait"] #status { background: #333; color: #eee }
+		}
+		ol { padding-left: 1.2rem }
+		li { margin: .3rem 0 }
+		li b { font-weight: 600 }
+		code { font-family: ui-monospace, monospace; font-size: .9em }
+		.err { color: #b00020 }
+		@media (prefers-color-scheme: dark) { .err { color: #ff8a95 } }
+	</style>
+</head>
+<body data-state="wait">
+	<h1>LiteJS Server &ndash; Service Worker test</h1>
+	<p>
+		This page is served by a plain static server that has <b>no app routes</b>.
+		Every check below is answered by the Service Worker, in the browser, by
+		the same app that runs on the servers. If the worker is not in control,
+		they all fail.
+	</p>
+	<p id="status">Registering&hellip;</p>
+	<ol id="results"></ol>
+	<p>
+		<button id="again">Run again</button>
+		<button id="reset">Unregister and reload</button>
+	</p>
+
+<script type="module">
+var results = document.getElementById("results")
+, status = document.getElementById("status")
+, checks = [
+	[ "GET /info reports the service worker", async () => {
+		var info = await (await fetch("/info?a=1")).json()
+		assert(info.runtime === "service-worker", "runtime is " + info.runtime)
+		assert(info.path === "/info", "path is " + info.path)
+		assert(info.query === "a=1", "query is " + info.query)
+	} ],
+	[ "GET /hello/{name} reads a route param", async () => {
+		var text = await (await fetch("/hello/moon")).text()
+		assert(text === "Hello moon", "body is " + text)
+	} ],
+	[ "POST /echo round-trips the body", async () => {
+		var body = "echo-" + Math.random().toString(36).slice(2)
+		, res = await (await fetch("/echo", { method: "POST", body })).json()
+		assert(res.echo === body, "body is " + res.echo)
+	} ],
+	[ "GET /teapot sets the status", async () => {
+		var res = await fetch("/teapot")
+		assert(res.status === 418, "status is " + res.status)
+	} ],
+	[ "GET /nowhere is a 404", async () => {
+		var res = await fetch("/nowhere")
+		assert(res.status === 404, "status is " + res.status)
+	} ],
+]
+
+function assert(ok, message) {
+	if (!ok) throw new Error(message)
+}
+
+async function run() {
+	var passed = 0
+	results.textContent = ""
+	document.body.dataset.state = "wait"
+	status.textContent = "Running…"
+
+	for (var [ name, fn ] of checks) {
+		var li = document.createElement("li")
+		try {
+			await fn()
+			li.innerHTML = "✔ <b>" + name + "</b>"
+			passed++
+		} catch (e) {
+			li.innerHTML = "✘ <b>" + name + "</b> <span class=err>" + e.message + "</span>"
+		}
+		results.appendChild(li)
+	}
+
+	// Machine-readable, for a UI test driving this page.
+	window.swTest = { passed, total: checks.length }
+	document.body.dataset.state = passed === checks.length ? "pass" : "fail"
+	status.textContent = passed + " / " + checks.length +
+		(passed === checks.length ? " passed" : " passed — see failures above")
+}
+
+async function start() {
+	if (!navigator.serviceWorker) {
+		document.body.dataset.state = "fail"
+		return status.textContent = "This browser has no Service Worker support."
+	}
+	await navigator.serviceWorker.register("/sw.js")
+	await navigator.serviceWorker.ready
+
+	// serve() calls skipWaiting and clients.claim, so a first load usually
+	// becomes controlled a tick later. When it does not — a cold profile under
+	// automation is the common case — one reload always fixes it. Guarded by
+	// sessionStorage so a genuinely broken worker cannot loop.
+	if (!navigator.serviceWorker.controller) {
+		status.textContent = "Waiting for the worker to take control…"
+		var controlled = await Promise.race([
+			new Promise(resolve => navigator.serviceWorker
+				.addEventListener("controllerchange", () => resolve(true), { once: true })),
+			new Promise(resolve => setTimeout(resolve, 1500, false)),
+		])
+		if (!controlled) {
+			if (!sessionStorage.swReloaded) {
+				sessionStorage.swReloaded = "1"
+				return location.reload()
+			}
+			document.body.dataset.state = "fail"
+			return status.textContent = "The worker registered but never took control."
+		}
+	}
+
+	sessionStorage.removeItem("swReloaded")
+	await run()
+}
+
+document.getElementById("again").onclick = run
+document.getElementById("reset").onclick = async () => {
+	var regs = await navigator.serviceWorker.getRegistrations()
+	await Promise.all(regs.map(reg => reg.unregister()))
+	location.reload()
+}
+
+start()
+</script>
+</body>
+</html>
