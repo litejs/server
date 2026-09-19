@@ -89,6 +89,28 @@ describe('node adapter', !skip && (() => {
 		}
 	})
 
+	test('HEAD reaches the handler as HEAD', async (assert, mock) => {
+		mock.swap(console, 'log', () => {})
+		var app = App()
+		app.get('hi', req => (req.resHeaders['x-method'] = req.method, 'world'))
+		app.head('only', () => 204)
+
+		var port = 18734
+		, base = 'http://127.0.0.1:' + port
+		, server = await serveNode(app, { PORT: port, BIND_ADDR: '127.0.0.1' })
+		try {
+			var res = await untilReady(() => fetch(base + '/hi', { method: 'HEAD' }))
+			assert.equal(res.headers.get('x-method'), 'HEAD', 'a GET route sees the real method')
+			assert.equal(await res.text(), '', 'HEAD response has no body')
+			res = await fetch(base + '/only', { method: 'HEAD' })
+			assert.equal(res.status, 204, 'a HEAD route is reachable')
+			res = await fetch(base + '/only')
+			assert.equal(res.status, 405, 'a HEAD route does not answer GET')
+		} finally {
+			server.close()
+		}
+	})
+
 	test('sends every Set-Cookie line', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		var app = App()
