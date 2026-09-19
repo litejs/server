@@ -265,6 +265,18 @@ describe('handler', () => {
 		assert.equal(console.error.called, 1, 'error is logged server-side')
 	})
 
+	test('a thrown non-Error is a generic, logged 500: {0}', [
+		[ 'a string', () => { throw 'db secret' } ],
+		[ 'a number', () => { throw 404 } ],
+		[ 'an object', () => { throw { code: 410 } } ],
+	], async (_, handler, assert, mock) => {
+		mock.swap(console, 'error', mock.fn())
+		var res = await send(handler, '/')
+		assert.equal(res.status, 500)
+		assert.equal(await res.text(), 'Internal Server Error', 'thrown value is not sent as a body')
+		assert.equal(console.error.called, 1, 'error is logged server-side')
+	})
+
 	test('a thrown error with a 4xx code exposes its message', async (assert, mock) => {
 		mock.swap(console, 'error', mock.fn())
 		var res = await send(() => { var e = new Error('gone'); e.code = 410; throw e }, '/')
