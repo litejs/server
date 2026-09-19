@@ -50,7 +50,6 @@ export interface Ctx {
 }
 
 export interface ServerRequest extends Request {
-	header(name: string): string | null
 	origin: string
 	// path is percent-encoded and mount-stripped, fullPath is decoded
 	path: string

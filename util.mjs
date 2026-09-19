@@ -35,7 +35,7 @@ var UNDEF
 , hasOwn = Object.hasOwn
 , hide = (obj, key, value) => Object.defineProperty(obj, key, { value })
 , ownSlot = (obj, key, make) => (hasOwn(obj, key) ? obj : hide(obj, key, make()))[key]
-, header = (req, name) => req?.headers?.get(name) || ''
+, header = (req, name) => req.headers?.get(name) || ''
 , hex = val => Array.from(toUint(val), c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 , anyObj = obj => !!obj && typeof obj === 'object'
 , isArr = Array.isArray

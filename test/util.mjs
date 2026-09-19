@@ -123,7 +123,6 @@ describe('util.mjs', () => {
 		assert.equal(header(res, 'content-type'), 'text/plain')
 		assert.equal(header(res, 'Content-Type'), 'text/plain', 'case-insensitive')
 		assert.equal(header(res, 'x-missing'), '', 'missing header')
-		assert.equal(header(null, 'range'), '', 'no request')
 		assert.equal(header({}, 'range'), '', 'no headers')
 		assert.end()
 	})

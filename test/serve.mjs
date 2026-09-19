@@ -228,22 +228,20 @@ describe('handler', () => {
 		assert.equal(res.headers.get('content-type'), null, 'no content-type is forced')
 	})
 
-	test('request is patched with path, query, origin, header and searchParams', async (assert) => {
+	test('request is patched with path, query, origin and searchParams', async (assert) => {
 		var res = await send(req => ({
 			path: req.path,
 			fullPath: req.fullPath,
 			query: req.query,
 			origin: req.origin,
 			x: req.searchParams.get('x'),
-			h: req.header('x-test'),
-		}), '/q?x=1&y=2', { headers: { 'x-test': 'value' } })
+		}), '/q?x=1&y=2')
 		assert.equal(await res.json(), {
 			path: '/q',
 			fullPath: '/q',
 			query: 'x=1&y=2',
 			origin: 'http://localhost',
 			x: '1',
-			h: 'value',
 		})
 	})
 
