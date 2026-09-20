@@ -114,8 +114,8 @@ export interface Negotiated {
 	type?: string
 	subtype?: string
 	suffix?: string
-	// the value choices held for rule, the object form only
-	o?: any
+	// the rule as written in choices, or the value choices held for it in the object form
+	o: any
 	[param: string]: any
 }
 

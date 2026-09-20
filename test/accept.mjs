@@ -27,6 +27,7 @@ describe('accept', () => {
 			match: 'application/xml',
 			q: 1,
 			rule: '*/*',
+			o: '*/*',
 			type: 'application',
 			subtype: 'xml',
 			suffix: '',
@@ -35,6 +36,7 @@ describe('accept', () => {
 			match: 'application/xaml+xml',
 			q: 1,
 			rule: '*/*+xml',
+			o: '*/*+xml; a=',
 			type: 'application',
 			subtype: 'xaml',
 			suffix: 'xml',
@@ -44,6 +46,7 @@ describe('accept', () => {
 			match: 'text/csv',
 			q: 1,
 			rule: 'text/csv',
+			o: 'text/csv;header=absent;delimiter=",";NULL="";br="\r\n"',
 			type: 'text',
 			suffix: '',
 			subtype: 'csv',
@@ -56,6 +59,7 @@ describe('accept', () => {
 			match: 'text/csv',
 			q: 0.5,
 			rule: 'text/csv',
+			o: 'text/csv;header=absent;delimiter=",";NULL="";br="\r\n"',
 			type: 'text',
 			subtype: 'csv',
 			suffix: '',
@@ -68,6 +72,7 @@ describe('accept', () => {
 			match: 'text/csv',
 			q: 1,
 			rule: 'text/csv',
+			o: 'text/csv;header=absent;delimiter=",";NULL="";br="\r\n"',
 			type: 'text',
 			subtype: 'csv',
 			suffix: '',
@@ -80,6 +85,7 @@ describe('accept', () => {
 			match: 'text/csv',
 			q: 1,
 			rule: 'text/csv',
+			o: 'text/csv;header=absent;delimiter=",";NULL="";br="\r\n"',
 			type: 'text',
 			suffix: '',
 			subtype: 'csv',
@@ -92,6 +98,7 @@ describe('accept', () => {
 			match: 'foo/xhtml+bar',
 			q: 1,
 			rule: '*/xhtml+*',
+			o: '*/xhtml+*',
 			type: 'foo',
 			subtype: 'xhtml',
 			suffix: 'bar',
@@ -99,6 +106,7 @@ describe('accept', () => {
 		// Non-extended notation using quoted-string.
 		.equal(nego('bar; title="US-$ rates"'), {
 			rule: 'bar',
+			o: 'bar; title=',
 			match: 'bar',
 			q: 1,
 			title: 'US-$ rates',
@@ -106,6 +114,7 @@ describe('accept', () => {
 		// Extended notation using the Unicode character U+00A3 ("£").
 		.equal(nego("bar; title*=utf-8'en'%C2%A3%20rates"), {
 			rule: 'bar',
+			o: 'bar; title=',
 			match: 'bar',
 			q: 1,
 			title: '£ rates',
@@ -113,6 +122,7 @@ describe('accept', () => {
 		// Extended notation takes precedence over a plain parameter.
 		.equal(nego("bar; title=\"EURO exchange rates\"; title*=UTF-8''%c2%a3%20and%20%e2%82%ac%20rates"), {
 			rule: 'bar',
+			o: 'bar; title=',
 			match: 'bar',
 			q: 1,
 			title: '£ and € rates',
@@ -144,18 +154,28 @@ describe('accept', () => {
 		assert
 		.equal(nego('utf-8, iso-8859-1;q=0.5, *;q=0.1'), {
 			rule: 'utf-8',
+			o: 'utf-8',
 			match: 'utf-8',
 			q: 1,
 		})
 		.equal(nego('ISO-8859-15;q=0.5, *;q=0.1'), {
 			rule: 'iso-8859-15',
+			o: 'iso-8859-15',
 			match: 'ISO-8859-15',
 			q: 0.5,
 		})
 		.equal(nego('iso,iso-123;q=0.5, *;q=0.1'), {
 			rule: 'utf-8',
+			o: 'utf-8',
 			match: '*',
 			q: 0.1,
+		})
+		// A later unmatched token with higher q must not clobber the match.
+		.equal(nego('utf-8;q=0.5, iso-8859-1'), {
+			rule: 'utf-8',
+			o: 'utf-8',
+			match: 'utf-8',
+			q: 0.5,
 		})
 		.ok(handleLargeHeader(nego))
 		.end()
@@ -170,17 +190,21 @@ describe('accept', () => {
 
 		assert
 		// Surrounding whitespace is trimmed off the rules.
-		.equal(nego4('br'), { rule: 'br', match: 'br', q: 1 })
-		.equal(nego4('gzip;q=0.8'), { rule: 'gzip', match: 'gzip', q: 0.8 })
+		.equal(nego4('br'), { rule: 'br', o: 'br', match: 'br', q: 1 })
+		.equal(nego4('gzip;q=0.8'), { rule: 'gzip', o: 'gzip;q=0.5', match: 'gzip', q: 0.8 })
+		.equal(nego(' gzip ,br').match, 'gzip', 'whitespace before the first token is skipped')
+		.equal(accept('text/csv ;header=')('text/csv;header=present').header, 'present', 'whitespace before a rule parameter')
 		.equal(nego('gzip, br').match, 'gzip', 'choice-side q is ignored')
 		.equal(nego('br, gzip').match, 'br')
 		.equal(nego('gzip'), {
 			rule: 'gzip',
+			o: 'gzip;q=0.5',
 			match: 'gzip',
 			q: 1,
 		})
 		.equal(nego('gzip\t;\tq=0.8'), {
 			rule: 'gzip',
+			o: 'gzip;q=0.5',
 			match: 'gzip',
 			q: 0.8,
 		})

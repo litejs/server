@@ -1,14 +1,14 @@
 
-import { Data, hasOwn, isObj, isStr } from './util.mjs'
+import { hasOwn, isObj, isStr } from './util.mjs'
 
 
 var accept = choices => {
 	var rules = isObj(choices) ? Object.keys(choices) : choices
-	, escapeRe = /[.+?^!:${}()|[\]/\\]/g
-	, paramRe = /;\s*(\w+)(=|\*=utf-8\'\w*\')("([^"]*)"|[^\s,;]*)/gi
+	, paramRe = /;\s*(\w+)(=|\*=utf-8'\w*')("([^"]*)"|[^\s,;]*)/gi
+	, tokenRe = /(?:^|,)\s*([^\s;,]+)(?=(?:[^,"]|"[^"]*")*?;\s*q=([\d.]+)|)((?:[^,"]|"[^"]*")*)/g
 	, parseParams = (str, map, init) => {
-		for (var m, u, val; (m = paramRe.exec(str)); ) if (init || hasOwn(map, m[1])) {
-			val = m[4] === u ? m[3] : m[4]
+		for (var m, val; (m = paramRe.exec(str)); ) if (init || hasOwn(map, m[1])) {
+			val = m[4] ?? m[3]
 			try {
 				val = decodeURIComponent(val)
 			} catch {}
@@ -16,35 +16,27 @@ var accept = choices => {
 		}
 		return map
 	}
-	, qPos = 1
-	, re = RegExp('(?:^|,\\s*)(?:(\\*(?:\\/\\*)?|' + (rules + '').replace(/,|\s*([^\s,;]+)(;(?:[^,"]|"[^"]*")*)?\s*/g, (all, rule, params) => {
-		if (rule) {
-			params = parseParams[qPos++] = params ? parseParams(params, Data(), 1) : {}
-			params.rule = rule
-			if (choices !== rules) params.o = choices[all]
-			return rule.replace(escapeRe, '\\$&').replace(/\*/g, '[^,;\\s\\/+]+')
-		}
-		return ')|('
-	}) + '))(?=[\\s;,]|$)(?=(?:[^,"]|"[^"]*")*?;\\s*q=([\\d.]+)|)((?:[^,"]|"[^"]*")*)', 'gi')
+	, defs = [
+		...('' + rules).matchAll(/([^\s,;]+)((?:\s*;\s*(?:[^,"\s]|"[^"]*")*)?)/g)
+	].map(([all, rule, params]) => parseParams(params, { rule, o: rules === choices ? all : choices[all] }, 1))
+
+	rules = defs.map(def => RegExp('^(?:\\*(?:/\\*)?|' + def.rule.replace(/\W/g, c => c == '*' ? '[^/+]+' : '\\' + c) + ')$', 'i'))
 
 	return h => {
-		if (isStr(h) && qPos > 1) {
-			for (var m, w, best, q = re.lastIndex = 0, params; (m = re.exec(h)) && q < 1; ) {
-				if ((w = (w = m[qPos]) && w >= 0 && w < 1 ? +w : 1) > q) {
-					best = m
-					q = w
-				}
+		if (isStr(h)) for (var m, w, i, best, bestI, params, q = tokenRe.lastIndex = 0; q < 1 && (m = tokenRe.exec(h)); ) {
+			if ((w = m[2] < 1 ? +m[2] : 1) > q && (i = rules.findIndex(re => re.test(m[1]))) > -1) {
+				best = m
+				bestI = i
+				q = w
 			}
-			if (best) {
-				for (m = qPos; m > 1 && !best[--m]; );
-				params = parseParams(best[qPos + 1], { ...parseParams[m] })
-				params.q = q
-				m = ((params.match = best[m]) + '++').split(/[\/+]/)
-				if (m[1]) {
-					params.type = m[0]
-					params.subtype = m[1]
-					params.suffix = m[2]
-				}
+		}
+		if (best) {
+			params = parseParams(best[3], { ...defs[bestI] })
+			params.q = q
+			if ((m = ((params.match = best[1]) + '++').split(/[/+]/))[1]) {
+				params.type = m[0]
+				params.subtype = m[1]
+				params.suffix = m[2]
 			}
 		}
 		return params || null
