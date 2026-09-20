@@ -43,6 +43,15 @@ describe('content', () => {
 		duplex: 'half'
 	})
 	, fails = promise => promise.then(() => null, e => e)
+	// Every chunk lands on a later tick, so two overlapping reads of the body would interleave
+	, slow = (type, body, size) => new Request('http://localhost/', {
+		method: 'POST',
+		headers: { 'content-type': type },
+		body: new ReadableStream({
+			pull: async (ctrl, chunks = slow.chunks) => (await new Promise(setImmediate), chunks.length ? ctrl.enqueue(chunks.shift()) : ctrl.close())
+		}, (slow.chunks = body.match(RegExp('[\\s\\S]{1,' + size + '}', 'g')).map(s => new TextEncoder().encode(s)), {})),
+		duplex: 'half'
+	})
 
 	test('querystring nests keys', assert => {
 		assert
@@ -151,5 +160,24 @@ describe('content', () => {
 	test('truncated multipart ends without hanging', async assert => {
 		var body = await content(req('multipart/form-data;boundary=' + boundary, form.slice(0, 157), 5))
 		assert.equal(body, { ab: ['123', '4'] })
+	})
+
+	test('releases the request body {0}', [
+		['after a limit', { maxFields: 2 }],
+		['after a throwing file hook', { file: () => { throw Error('hook') } }],
+		['after the closing boundary', null],
+	], async (name, opts, assert) => {
+		var request = req('multipart/form-data;boundary=' + boundary, form, 7)
+		await fails(content(request, opts))
+		assert.strictEqual(request.body.locked, false)
+		// A cancelled stream reads as done, an unread one would still yield the rest
+		assert.equal(await request.body.getReader().read(), { value: undefined, done: true })
+	})
+
+	test('an unread file body does not race the next part, chunks of {0}', [
+		[3], [5], [7], [16]
+	], async (size, assert) => {
+		var body = await content(slow('multipart/form-data;boundary=' + boundary, form, size), { file: part => part.name })
+		assert.equal(body, { ...formBody, file_0: 'file_0', file_1: 'file_1' })
 	})
 })

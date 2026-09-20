@@ -102,7 +102,7 @@ app.post("upload", async (req, env) => {
 To keep a large file out of memory, handle the part yourself:
 `content(req, { file: part => upload(part.body).then(() => part.filename) })`.
 The handler runs for each file part in order and its return value takes the file's place in the body.
-A part has `name`, `filename`, `type`, `headers` and `body`,
+A part has `name`, `filename`, `type` and `body`,
 a `ReadableStream` that must be consumed before the next part is read;
 what a handler leaves unread is dropped.
 Limits `maxBodySize`, `maxFields`, `maxFieldSize`, `maxFiles` and `maxFileSize` throw a `413`,

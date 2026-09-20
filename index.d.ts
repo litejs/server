@@ -132,7 +132,6 @@ export interface Part extends Negotiated {
 	// empty for a plain field
 	filename: string
 	type?: string
-	headers: Record<string, string>
 	// must be consumed before the next part is requested
 	body: ReadableStream<Uint8Array>
 }
