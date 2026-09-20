@@ -69,6 +69,8 @@ or any value accepted as the body of a new `Response`.
 
 Set the status with `req.resStatus = 409` and add headers with `req.resHeaders.allow = "GET, PUT"`.
 Thrown errors map to `err.code || 500`; 5xx bodies are kept generic.
+Defer work to be executed after a response is handled with `req.defer(fn)`;
+it runs through `ctx.waitUntil`, so a Worker stays alive for it.
 
 Requests include `param`, `path`, `fullPath`, `query`, `searchParams`, and `header(name)`.
 Routes match against `path`, the raw, percent-encoded pathname;

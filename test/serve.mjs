@@ -280,6 +280,31 @@ describe('handler', () => {
 		assert.equal(await res.text(), 'deferred')
 	})
 
+	test('req.defer runs after every handler, through ctx.waitUntil', async (assert) => {
+		var log = []
+		, ctx = { waitUntil: p => log.push(p) }
+		, app = App()
+		.use(req => { req.defer(() => log.push('middleware')) })
+		.get('/', req => (req.defer(() => (log.push('handler'), 'result')), log.push('body'), 'ok'))
+		, res = await toHandler(app)(new Request('http://localhost/'), {}, ctx)
+		assert.equal(res.status, 200)
+		assert.equal(log.length, 5, 'both promises reach waitUntil before the handler returns')
+		assert.equal(log.slice(2), ['body', 'middleware', 'handler'])
+		assert.equal(await log[1], 'result', 'waitUntil sees the deferred result')
+	})
+
+	test('req.defer is set before the app runs and a rejection is logged', async (assert, mock) => {
+		mock.swap(console, 'error', mock.fn())
+		var res = await send(req => (req.defer(() => { throw Error('later') }), 404), '/')
+		assert.equal(res.status, 404)
+		await new Promise(r => setTimeout(r))
+		assert.equal(console.error.called, 1, 'the rejection is logged, not thrown')
+
+		await send(req => (req.defer(() => { throw 'later' }), 204), '/')
+		await new Promise(r => setTimeout(r))
+		assert.equal(console.error.calls[1].args[0], 'later', 'falls back to the value when there is no stack')
+	})
+
 	test('a returned Response is passed through unchanged', async (assert) => {
 		var res = await send(() => new Response('raw body', { status: 207 }), '/')
 		assert.equal(res.status, 207)

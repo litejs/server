@@ -61,6 +61,8 @@ export interface ServerRequest extends Request {
 	mount?: string
 	resStatus?: number
 	resHeaders: Record<string, string>
+	// Runs fn through ctx.waitUntil once every handler has finished
+	defer(fn: () => unknown): void
 }
 
 export type HandlerResult = Response | Error | number | string | object | null | void
