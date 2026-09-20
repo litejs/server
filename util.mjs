@@ -39,6 +39,14 @@ var UNDEF
 	toUint(data)
 )
 , ownSlot = (obj, key, make) => (hasOwn(obj, key) ? obj : hide(obj, key, make()))[key]
+, getCookie = (req, spec) => {
+	try {
+		var m = ('; ' + header(req, 'cookie')).split('; ' + (spec.name || spec) + '=')
+		// A repeated name is a fixation attempt
+		m = m.length === 2 ? decodeURIComponent(m[1].split(';')[0]) : ''
+		return !spec.re || spec.re.test(m) ? m : ''
+	} catch { return '' }
+}
 , header = (req, name) => req.headers?.get(name) || ''
 , hex = val => Array.from(toUint(val), c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 , anyObj = obj => !!obj && typeof obj === 'object'
@@ -77,7 +85,7 @@ export {
 	UNDEF,
 	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
-	each, fail, hasOwn, hide, header, hex, hmac,
+	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	aProto, oProto, getProto, ownSlot, setProto,
 	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
 	joinBuf,

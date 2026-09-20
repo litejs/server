@@ -3,7 +3,7 @@ import '@litejs/cli/test.js'
 import {
 	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
-	each, fail, hasOwn, hide, header, hex, hmac,
+	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	isArr, isFn, isNum, anyObj, isObj, isStr,
 	getProto, joinBuf, ownSlot,
 	toNum, toStr, toUint,
@@ -124,6 +124,47 @@ describe('util.mjs', () => {
 		assert.equal(header(res, 'Content-Type'), 'text/plain', 'case-insensitive')
 		assert.equal(header(res, 'x-missing'), '', 'missing header')
 		assert.equal(header({}, 'range'), '', 'no headers')
+		assert.end()
+	})
+
+	test('getCookie {1} from {0}', [
+		[ 'a=1; b=2; c=3', 'a', '1', 'first' ],
+		[ 'a=1; b=2; c=3', 'b', '2', 'middle' ],
+		[ 'a=1; b=2; c=3', 'c', '3', 'last' ],
+		[ 'a=1; b=; c=3', 'b', '', 'empty value' ],
+		[ 'a=1', 'x', '', 'missing name' ],
+		[ 'ab=1', 'b', '', 'name is whole, not a suffix' ],
+		[ 'a=1;b=2', 'b', '', 'a missing space is not a separator' ],
+		[ 'a=%C3%A9%20x', 'a', 'é x', 'value is percent-decoded' ],
+		[ 'a=%E0%A4%A', 'a', '', 'a bad escape reads as absent' ],
+		[ 'a=1; a=2', 'a', '', 'a repeated name is fixation' ],
+		[ '', 'a', '', 'empty header' ],
+	], (cookie, name, expected, _, assert) => {
+		assert.equal(getCookie(new Request('http://localhost/', { headers: { cookie } }), name), expected)
+		assert.end()
+	})
+
+	test('getCookie without a cookie header', (assert) => {
+		assert.equal(getCookie(new Request('http://localhost/'), 'a'), '')
+		assert.equal(getCookie({}, 'a'), '', 'no headers')
+		assert.end()
+	})
+
+	test('getCookie takes the name from a cookie spec', (assert) => {
+		var req = new Request('http://localhost/', { headers: { cookie: 'a=1; b=2' } })
+		, spec = { name: 'b', path: '/', httpOnly: true, sameSite: 'strict', maxAge: 34560000000 }
+		assert.equal(getCookie(req, spec), '2')
+		assert.equal(getCookie({}, spec), '', 'no headers')
+		assert.end()
+	})
+
+	test('getCookie {0} a value that {1} spec.re', [
+		[ 'keeps', 'matches', 'a=1; b=abc', 'abc' ],
+		[ 'drops', 'fails', 'a=1; b=ab1', '' ],
+		[ 'drops', 'fails after decoding', 'a=1; b=%61bc%2F', '' ],
+	], (_, __, cookie, expected, assert) => {
+		var req = new Request('http://localhost/', { headers: { cookie } })
+		assert.equal(getCookie(req, { name: 'b', re: /^[a-z]+$/ }), expected)
 		assert.end()
 	})
 
