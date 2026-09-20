@@ -34,6 +34,10 @@ var UNDEF
 , setProto = Object.setPrototypeOf
 , hasOwn = Object.hasOwn
 , hide = (obj, key, value) => Object.defineProperty(obj, key, { value })
+, hmac = async (key, data) => crypto.subtle.sign('HMAC',
+	await crypto.subtle.importKey('raw', toUint(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']),
+	toUint(data)
+)
 , ownSlot = (obj, key, make) => (hasOwn(obj, key) ? obj : hide(obj, key, make()))[key]
 , header = (req, name) => req.headers?.get(name) || ''
 , hex = val => Array.from(toUint(val), c => (c < 16 ? '0' : '') + c.toString(16)).join('')
@@ -73,7 +77,7 @@ export {
 	UNDEF,
 	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
-	each, fail, hasOwn, hide, header, hex,
+	each, fail, hasOwn, hide, header, hex, hmac,
 	aProto, oProto, getProto, ownSlot, setProto,
 	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
 	joinBuf,
