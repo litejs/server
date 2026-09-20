@@ -65,7 +65,7 @@ app.all("health", "OK")
 app.use(req => { req.resHeaders["x-served-by"] = "litejs" })
 app.mount("api", App())
 app.get("cached", dedupe(async req => req.path))
-const routeMatch: RegExpExecArray | "" | null = app.routers.GET.match({} as ServerRequest)
+const routeMatch: RegExpExecArray | "" | null = router.match({} as ServerRequest)
 
 const db = new DB(":memory:")
 const kv = KV(db, "kv")

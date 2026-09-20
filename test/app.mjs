@@ -139,7 +139,6 @@ describe('app', () => {
 		app.all('all', () => 'all')
 
 		assert.equal(app.get, undefined)
-		assert.equal(app.routers.GET, undefined)
 		assert.equal(await app(createReq('/head', 'HEAD')), 'head')
 
 		var req = createReq('/head', 'GET')
@@ -155,7 +154,6 @@ describe('app', () => {
 		app.use(() => { calls++ })
 		app.mount('api', sub)
 		assert.equal(app.get, undefined, 'mount does not restore the local alias')
-		assert.ok(app.routers.GET, 'mount creates the router required by the sub-app')
 		assert.equal(await app(createReq('/api', 'GET')), 'sub get')
 		assert.equal(calls, 1)
 
@@ -173,6 +171,7 @@ describe('app', () => {
 		assert.equal(await app(createReq('/missing', 'GET')), 404)
 		assert.equal(await app(createReq('/', 'POST')), 404)
 		assert.equal(await app(createReq('/', 'DELETE')), 404)
+		assert.equal(await app(createReq('/', 'constructor')), 404, 'a method naming a prototype key is just unknown')
 	})
 
 	test('mount reports actual sub-app methods for unimplemented methods', async (assert) => {
@@ -334,6 +333,7 @@ describe('router', () => {
 		'user/pre-{userId+}',
 		'literal?mark',
 		'literal#mark',
+		'emoji/😀',
 	]
 	routes.forEach((route, index) => {
 		r.add(route, (req) => ({ index, param: req.param }))
@@ -371,6 +371,7 @@ describe('router', () => {
 		['about/a', -1, {}],
 		['literal%3Fmark', 10, {}],
 		['literal%23mark', 11, {}],
+		['emoji/%F0%9F%98%80', 12, {}],
 
 	], async (url, expectedIndex, expectedParam, assert) => {
 		var result = await handle(r, createReq(url))

@@ -79,7 +79,7 @@ export interface AppOptions extends RouterOptions {
 
 export interface RouterInstance {
 	match(req: ServerRequest): RegExpExecArray | "" | null
-	add(route: string, handler: RouteHandler, _raw?: string): this
+	add(route: string, handler: RouteHandler): this
 	use(...fns: Handler[]): void
 	handle(req: ServerRequest, env: Env, ctx: Ctx, matched: RegExpExecArray): Promise<HandlerResult>
 }
@@ -87,14 +87,13 @@ export interface RouterInstance {
 // Route and mount paths are written without leading and trailing '/' - 'hello/{name}' NOT '/hello/{name}/'
 export interface AppInstance {
 	(req: ServerRequest, env: Env, ctx: Ctx): Promise<HandlerResult>
-	routers: Record<string, RouterInstance>
-	del(route: string, handler: RouteHandler, _raw?: string): AppInstance
-	get(route: string, handler: RouteHandler, _raw?: string): AppInstance
-	head(route: string, handler: RouteHandler, _raw?: string): AppInstance
-	patch(route: string, handler: RouteHandler, _raw?: string): AppInstance
-	post(route: string, handler: RouteHandler, _raw?: string): AppInstance
-	put(route: string, handler: RouteHandler, _raw?: string): AppInstance
-	all(route: string, handler: RouteHandler, _raw?: string): AppInstance
+	del(route: string, handler: RouteHandler): AppInstance
+	get(route: string, handler: RouteHandler): AppInstance
+	head(route: string, handler: RouteHandler): AppInstance
+	patch(route: string, handler: RouteHandler): AppInstance
+	post(route: string, handler: RouteHandler): AppInstance
+	put(route: string, handler: RouteHandler): AppInstance
+	all(route: string, handler: RouteHandler): AppInstance
 	mount(path: string, sub: Handler): AppInstance
 	use(...fns: Handler[]): AppInstance
 }

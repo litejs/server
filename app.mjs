@@ -1,82 +1,71 @@
 
-import { Data, isFn } from './util.mjs'
+import { isFn } from './util.mjs'
 
 
-var routeRe = /\{([\w%.]+)([^}]?)\}|\\(\{)|[^{\\]+/g
+var routeRe = /\{([\w%.]+)([^}]?)\}|\\?(.)/gu
 , routeEnc = s => encodeURI(s).replace(/[?#]/g, encodeURIComponent)
-, routeEsc = s => routeEnc(s).replace(
-	/(%)[\dA-F]{2}|[.*+?^${}()|[\]\\]/g,
-	(val, pr) => pr ? val.replace(/[A-F]/g, char => '[' + char + char.toLowerCase() + ']') : '\\' + val
-)
+, routeEsc = s => (s = routeEnc(s)).replace(s[1] ? /[A-F]/g : /[.*+$()]/, s[1] ? c => '[' + c + c.toLowerCase() + ']' : '\\$&')
 , App = opts => {
-	var methods = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
+	var method, router
+	, mounts = Router()
 	, exts = { '*': '(.*)', '+': '(\\d+)', '/': '((?:[^/]+/)*)', ...opts?.extensions }
-	, keys = Object.keys(methods).filter(method => methods[method])
-	, middleware = []
-	, mounts = Router(exts)
-	, addRouter = (_, method) => routers[method] || (
-		(routers[method] = Router(exts)).use(...middleware),
-		methods[method] ? app[methods[method]] = routers[method].add : keys.push(method)
+	, routers = { DELETE: 'del', GET: 'get', HEAD: 'head', PATCH: 'patch', POST: 'post', PUT: 'put', ...opts?.method }
+	, each = fn => {
+		for (method in routers) if (routers[method]) fn(routers[method], method)
+	}
+	, match = (m, req) => (router = routers[m])?.match?.(req) || m === 'HEAD' && match('GET', req)
+	, app = (req, env, ctx, m) => (
+		(m = match(req.method, req) || (router = mounts).match(req)) ? router.handle(req, env, ctx, m) :
+		(m = [], each(() => match(method, req) && m.push(method)), m[0]) ? (
+			(req.resHeaders ??= {}).Allow = m.join(', '),
+			opts?.notAllowed?.(req, env, ctx) ?? 405
+		) : opts?.notFound?.(req, env, ctx) ?? 404
 	)
-	, app = (req, env, ctx) => {
-		let tmp = routers[req.method], matched = tmp?.match(req)
-		if (matched || req.method === 'HEAD' && (matched = (tmp = routers.GET)?.match(req)) || (matched = (tmp = mounts).match(req))) return tmp.handle(req, env, ctx, matched)
-		if ((tmp = keys.filter(method => routers[method].match(req) || method === 'HEAD' && routers.GET?.match(req)).join(', '))) {
-			(req.resHeaders ??= {}).Allow = tmp
-			return opts?.notAllowed?.(req, env, ctx) ?? 405
-		}
-		return opts?.notFound?.(req, env, ctx) ?? 404
-	}
-	, each = app.each = fn => (keys.forEach(method => fn(routers[method], method)), app)
-	, routers = app.routers = Data()
 
-	each(addRouter)
+	each(alias => app[alias] = (routers[method] = Router(exts)).add)
 
-	app.all = (route, handler, _raw) => each(r => r.add(route, handler, _raw))
-	app.mount = (path, sub) => {
-		var encLen = path ? routeEnc(path).length + 1 : 0
-		, raw = routeEsc(path) + '(?:/.*|)'
-		, handler = (req, env, ctx) => (req.mount = path, req.path = req.path.slice(encLen) || '/', sub(req, env, ctx))
-		sub.each(addRouter)
-		mounts.add(path, handler, raw)
-		return app.all(path, handler, raw)
-	}
-	app.use = (...fns) => (middleware.push(...fns), mounts.use(...fns), each(r => r.use(...fns)))
+	app.all = (route, handler) => (each(r => r.add(route, handler)), app)
+	app.use = (...fns) => (mounts.use(...fns), each(r => r.use(...fns)), app)
+	app.mount = (path, sub, len) => (
+		len = routeEnc(path),
+		mounts.add(path, (req, env, ctx) => (req.mount = path, req.path = req.path.slice(len) || '/', sub(req, env, ctx)), len + '(?:/.*|)'),
+		len = len.length + !!path,
+		app
+	)
 
 	return app
 }
 , Router = exts => {
 	var re
-	, reStr = ''
+	// [] matches nothing, so an empty router compiles and every route can start with |
+	, reStr = '^/*(?:[]'
 	, groups = 1
 	, routes = []
 
 	return {
-		match: req => reStr && (re ||= RegExp(`^/*(?:${reStr})[/\\s]*$`)).exec(req.path || ''),
+		match: req => (re ||= RegExp(reStr + ')[/\\s]*$')).exec(req.path || ''),
 		add(route, handler, _raw) {
 			var endSlot = routes.push(groups++, re = 0, route) - 2
-			reStr += (reStr ? '|(' : '(') + (_raw || route.replace(routeRe, (_, expr, ext, toEsc) =>
-				expr ? (routes.push(expr), groups++, exts[ext] || '([^/]+)') : routeEsc(toEsc || _)
+			reStr += '|(' + (_raw || route.replace(routeRe, (_, expr, ext, char) =>
+				expr ? (routes.push(expr), groups++, exts[ext] || '([^/]+)') : routeEsc(char)
 			)) + ')'
 			routes[endSlot] = routes.push(handler)
 			return this
 		},
 		use(...fns) {
-			routes.push(0, 2 + routes.length + fns.length, ...fns)
+			// Group 0 is the whole match, so middleware is a route that always matches
+			fns.forEach(fn => routes.push(0, routes.length + 4, 0, fn))
 		},
 		async handle(req, env, ctx, matched) {
 			// Handlers and middleware throw on error; toHandler() owns error -> response.
-			for (var end, m, pos = 0, len = routes.length, param = req.param ??= {}; pos < len; pos = end) {
+			// Record: [group, end, routeStr, ...paramNames, handler]
+			for (var end, m, group, pos = 0, param = req.param ??= {}; pos < routes.length; pos = end) {
 				end = routes[pos + 1]
-				if ((m = routes[pos++]) < 1) {
-					// Middleware: [0, end, ...fns]
-					for (; ++pos < end; ) if ((m = await routes[pos](req, env, ctx))) return m
-				} else if (matched[m] != null) {
-					// Matched route: [group, end, routeStr, ...paramNames, handler]
-					req.route = routes[++pos]
-					for (end--; ++pos < end; ) param[routes[pos]] = decodeURIComponent(matched[++m])
-					m = routes[pos]
-					return isFn(m) ? m(req, env, ctx) : m
+				if (matched[group = m = routes[pos]] != null) {
+					req.route = routes[pos += 2]
+					for (; ++pos < end - 1; ) param[routes[pos]] = decodeURIComponent(matched[++m])
+					m = isFn(m = routes[pos]) ? m(req, env, ctx) : m
+					if (group || (m = await m)) return m
 				}
 			}
 		}
