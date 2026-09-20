@@ -428,6 +428,16 @@ describe('handler', () => {
 		assert.equal(res.headers.get('content-type'), 'text/html', 'headers are preserved')
 		assert.equal(await res.text(), '', 'body is stripped for HEAD')
 	})
+
+	test('HEAD returns a bodiless Response as is and rebuilds one with a body', async (assert) => {
+		var raw = new Response(null, { status: 204 })
+		, res = await send(() => raw, '/', { method: 'HEAD' })
+		assert.strictEqual(res, raw, 'nothing to strip, so nothing is rebuilt')
+		res = await send(() => new Response('world', { status: 207, statusText: 'Multi' }), '/', { method: 'HEAD' })
+		assert.equal(res.status, 207)
+		assert.equal(res.statusText, 'Multi', 'status text survives the rebuild')
+		assert.equal(await res.text(), '', 'body is stripped for HEAD')
+	})
 })
 
 
