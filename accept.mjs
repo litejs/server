@@ -1,5 +1,5 @@
 
-import { hasOwn, isObj, isStr } from './util.mjs'
+import { UNDEF, hasOwn, header, isObj, isStr } from './util.mjs'
 
 
 var accept = choices => {
@@ -42,7 +42,16 @@ var accept = choices => {
 		return params || null
 	}
 }
+, negotiate = (choices, nego = accept(choices)) => (req, m, h) => (
+	// toHandler reads req.negod
+	(m = req.negod = nego(header(req, 'accept') || header(req, 'content-type') + ',*/*')) ? (
+		h = req.resHeaders,
+		h.vary = 'accept',
+		m.filename && (h['content-disposition'] = 'attachment; filename=' + m.filename),
+		UNDEF
+	) : 406
+)
 
 
-export { accept }
+export { accept, negotiate }
 

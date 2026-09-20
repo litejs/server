@@ -252,6 +252,17 @@ describe('handler', () => {
 		assert.equal(res.headers.get('content-type'), expectedType)
 	})
 
+	test('req.negod encodes an object and names its content-type; a string is untouched', async (assert) => {
+		var negod = { o: (data, n) => (assert.strictEqual(n, negod), 'a=' + data.a), rule: 'text/x-neg' }
+		, res = await send(req => (req.negod = negod, { a: 1 }), '/')
+		assert.equal(await res.text(), 'a=1')
+		assert.equal(res.headers.get('content-type'), 'text/x-neg')
+		res = await send(req => (req.negod = negod, 'raw'), '/')
+		assert.equal(await res.text(), 'raw')
+		// Bun sets no content-type on a string body, Node does; only the rule staying out matters.
+		assert.notEqual(res.headers.get('content-type'), 'text/x-neg')
+	})
+
 	test('a string is sent as the body; the handler forces no content-type', async (assert) => {
 		var res = await send(() => 'plain', '/')
 		assert.equal(res.status, 200)

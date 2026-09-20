@@ -124,6 +124,7 @@ export type Negotiator = (header?: string | null) => Negotiated | null
 
 export function accept(choices: string | readonly string[]): Negotiator
 export function accept<T>(choices: Record<string, T>): (header?: string | null) => (Negotiated & { o: T }) | null
+export function negotiate(choices: Record<string, (data: any, negotiated: Negotiated) => BodyInit>): Handler
 
 //
 // content.mjs

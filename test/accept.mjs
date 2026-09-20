@@ -1,5 +1,6 @@
 import '@litejs/cli/test.js'
-import { accept } from '../index.mjs'
+import { accept, App, negotiate } from '../index.mjs'
+import { toHandler } from '../lib/serve.mjs'
 
 describe('accept', () => {
 	function handleLargeHeader(nego) {
@@ -218,3 +219,48 @@ describe('accept', () => {
 		.end()
 	})
 })
+
+describe('negotiate', () => {
+	var app = App().use(negotiate({
+		'application/json;filename=': JSON.stringify,
+		'text/csv;header=': (data, negod) => (negod.header === 'absent' ? '' : 'a\n') + data.a
+	}))
+	.get('data', () => ({ a: 1 }))
+	.get('text', () => 'raw')
+	.post('data', () => ({ a: 2 }))
+	, send = (method, accept, type) => toHandler(app)(new Request('http://localhost/data', { method, body: method === 'GET' ? null : 'x', headers: { accept, 'content-type': type } }))
+
+	test('{5}: {0} with Accept {1} and body {2}', [
+		[ 'GET', '', '', 'application/json', '{"a":1}', 'the first rule is the default' ],
+		[ 'GET', '*/*', '', 'application/json', '{"a":1}', 'a wildcard takes the first rule' ],
+		[ 'GET', 'text/csv', '', 'text/csv', 'a\n1', 'an explicit Accept picks a rule' ],
+		[ 'GET', 'text/csv;header=absent', '', 'text/csv', '1', 'rule parameters come from Accept' ],
+		[ 'POST', '', 'text/csv', 'text/csv', 'a\n2', 'without Accept the answer takes the format that was sent' ],
+		[ 'POST', '', 'application/x-www-form-urlencoded', 'application/json', '{"a":2}', 'a body type without a rule falls back to the first rule' ],
+		[ 'POST', 'application/json', 'text/csv', 'application/json', '{"a":2}', 'an explicit Accept wins over the body type' ],
+	], async (method, accept, type, expectedType, expectedBody, _, assert) => {
+		var res = await send(method, accept, type)
+		assert.equal(res.status, 200)
+		assert.equal(res.headers.get('content-type'), expectedType)
+		assert.equal(res.headers.get('vary'), 'accept')
+		assert.equal(await res.text(), expectedBody)
+	})
+
+	test('an unmatched Accept is 406', async assert => {
+		var res = await send('GET', 'image/png', '')
+		assert.equal(res.status, 406)
+		assert.equal(res.headers.get('vary'), null, 'nothing was negotiated')
+	})
+
+	test('a filename parameter sets Content-Disposition', async assert => {
+		var res = await send('GET', 'application/json;filename=data.json', '')
+		assert.equal(res.headers.get('content-disposition'), 'attachment; filename=data.json')
+	})
+
+	test('a string result is not encoded', async assert => {
+		var res = await toHandler(app)(new Request('http://localhost/text', { headers: { accept: 'text/csv' } }))
+		assert.equal(await res.text(), 'raw')
+		assert.equal(res.headers.get('vary'), 'accept', 'the middleware still ran')
+	})
+})
+
