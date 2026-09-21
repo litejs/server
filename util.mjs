@@ -38,7 +38,11 @@ var UNDEF
 	await crypto.subtle.importKey('raw', toUint(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']),
 	toUint(data)
 )
+, now = Date.now
+// Whole seconds; >>> 0 wraps in 2106
+, ts = () => now() / 1000 >>> 0
 , ownSlot = (obj, key, make) => (hasOwn(obj, key) ? obj : hide(obj, key, make()))[key]
+, sha256 = val => crypto.subtle.digest('SHA-256', toUint(val))
 , getCookie = (req, spec) => {
 	try {
 		var m = ('; ' + header(req, 'cookie')).split('; ' + (spec.name || spec) + '=')
@@ -86,7 +90,7 @@ export {
 	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
-	aProto, oProto, getProto, ownSlot, setProto,
+	aProto, oProto, getProto, now, ownSlot, setProto, sha256, ts,
 	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,

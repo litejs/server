@@ -22,6 +22,10 @@ export const getProto: typeof Object.getPrototypeOf
 export const hasOwn: typeof Object.hasOwn
 export function header(src: { headers?: Headers | { get(name: string): string | null } } | null | undefined, name: string): string
 export function hex(val: unknown): string
+// Milliseconds and whole seconds since the epoch
+export function now(): number
+export function ts(): number
+export function sha256(val: string | ArrayBuffer | Uint8Array | number[]): Promise<ArrayBuffer>
 // a non-enumerable, non-writable slot, invisible to spread and JSON
 export function hide<T extends object>(obj: T, key: PropertyKey, value: unknown): T
 export const isArr: typeof Array.isArray

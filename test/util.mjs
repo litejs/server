@@ -5,7 +5,7 @@ import {
 	b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	isArr, isFn, isNum, anyObj, isObj, isStr,
-	getProto, joinBuf, ownSlot,
+	getProto, joinBuf, now, ownSlot, sha256, ts,
 	toNum, toStr, toUint,
 } from '../util.mjs'
 
@@ -156,6 +156,27 @@ describe('util.mjs', () => {
 		assert.equal(getCookie(req, spec), '2')
 		assert.equal(getCookie({}, spec), '', 'no headers')
 		assert.end()
+	})
+
+	test('now is milliseconds and ts whole seconds since the epoch', assert => {
+		var ms = Date.now()
+		assert
+		.ok(now() >= ms && now() - ms < 1000)
+		.ok(ts() >= ms / 1000 >>> 0 && ts() - ms / 1000 < 1)
+		.strictEqual(ts() % 1, 0)
+		.end()
+	})
+
+	test('sha256 returns the raw digest of {0}, the caller picks the format', [
+		[ 'a string', 'abc' ],
+		[ 'bytes', new Uint8Array([97, 98, 99]) ],
+	], async (_, input, assert) => {
+		var digest = await sha256(input)
+		assert
+		.ok(digest instanceof ArrayBuffer)
+		.equal(digest.byteLength, 32)
+		.equal(hex(digest), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+		.equal(b64Url(digest), 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0')
 	})
 
 	test('getCookie {0} a value that {1} spec.re', [
