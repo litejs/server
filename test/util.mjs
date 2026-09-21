@@ -5,7 +5,7 @@ import {
 	b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	isArr, isFn, isNum, anyObj, isObj, isStr,
-	getProto, joinBuf, now, ownSlot, sha256, sleep, ts,
+	getProto, joinBuf, now, ownSlot, rand, sha256, sleep, ts,
 	toNum, toStr, toUint,
 } from '../util.mjs'
 
@@ -164,6 +164,16 @@ describe('util.mjs', () => {
 		.ok(now() >= ms && now() - ms < 1000)
 		.ok(ts() >= ms / 1000 >>> 0 && ts() - ms / 1000 < 1)
 		.strictEqual(ts() % 1, 0)
+		.end()
+	})
+
+	test('rand gives fresh random bytes', assert => {
+		var a = rand(16)
+		assert
+		.ok(a instanceof Uint8Array)
+		.equal(a.length, 16)
+		.equal(rand(0).length, 0)
+		.notEqual(hex(a), hex(rand(16)))
 		.end()
 	})
 

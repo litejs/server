@@ -42,6 +42,7 @@ var UNDEF
 // Whole seconds; >>> 0 wraps in 2106
 , ts = () => now() / 1000 >>> 0
 , ownSlot = (obj, key, make) => (hasOwn(obj, key) ? obj : hide(obj, key, make()))[key]
+, rand = len => crypto.getRandomValues(new Uint8Array(len))
 , sha256 = val => crypto.subtle.digest('SHA-256', toUint(val))
 , sleep = ms => new Promise(r => setTimeout(r, ms))
 , getCookie = (req, spec) => {
@@ -91,7 +92,7 @@ export {
 	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
-	aProto, oProto, getProto, now, ownSlot, setProto, sha256, sleep, ts,
+	aProto, oProto, getProto, now, ownSlot, rand, setProto, sha256, sleep, ts,
 	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,

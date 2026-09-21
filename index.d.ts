@@ -25,6 +25,7 @@ export function hex(val: unknown): string
 // Milliseconds and whole seconds since the epoch
 export function now(): number
 export function ts(): number
+export function rand(len: number): Uint8Array
 export function sha256(val: string | ArrayBuffer | Uint8Array | number[]): Promise<ArrayBuffer>
 export function sleep(ms?: number): Promise<void>
 // a non-enumerable, non-writable slot, invisible to spread and JSON
