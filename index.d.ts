@@ -449,9 +449,11 @@ export interface AwsApiOptions {
 	fetch?: typeof fetch
 }
 
+export type AwsQuery = Record<string, string | number | undefined>
+
 export interface AwsApi {
-	request(method: string, key?: string, body?: BodyInit | null, query?: string, extra?: Record<string, string>): Promise<Response>
-	url(key: string, opts?: { method?: string, expires?: number, date?: string, query?: string }): Promise<string>
+	request(method: string, key?: string, body?: BodyInit | null, query?: AwsQuery, extra?: Record<string, string>): Promise<Response>
+	url(key: string, opts?: { method?: string, expires?: number, date?: string, query?: AwsQuery }): Promise<string>
 }
 
 export function awsApi(opts: AwsApiOptions): AwsApi

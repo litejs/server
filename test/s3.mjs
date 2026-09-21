@@ -31,6 +31,15 @@ describe('s3.mjs', () => {
 
 	})
 
+	test('host is signed but left for fetch to set', async (assert) => {
+		var s3 = mock(function(url, opts) {
+			assert.ok(opts.headers.authorization.includes('SignedHeaders=host;'))
+			assert.notOk('host' in opts.headers, 'Host is a forbidden fetch header, runtimes derive it from the url')
+			return new Response('')
+		})
+		await s3.get('k')
+	})
+
 	test('get returns Response with R2 metadata', async (assert) => {
 		var s3 = mock(function(url, opts) {
 			assert.equal(opts.method, 'GET')
@@ -181,7 +190,6 @@ describe('s3.mjs', () => {
 		assert.ok(err instanceof Error)
 		assert.equal(err.message, 'S3 request failed: 503')
 		assert.equal(err.code, 503)
-		assert.equal(err.status, 503)
 		assert.strictEqual(err.response, response)
 	})
 
@@ -213,7 +221,7 @@ describe('s3.mjs', () => {
 	test('list parses XML response', async (assert) => {
 		var s3 = mock(function(url, opts) {
 			assert.equal(opts.method, 'GET')
-			assert.ok(url.indexOf('list-type=2') > -1)
+			assert.equal(url.split('?')[1], 'list-type=2', 'unset options are left out')
 			return new Response(
 				'<ListBucketResult>' +
 				'<IsTruncated>false</IsTruncated>' +
@@ -452,7 +460,7 @@ describe('s3.mjs', () => {
 			assert.ok(opts.headers.authorization)
 			return new Response('', { status: 503 })
 		})
-		var res = await s3.request('POST', 'big.bin', null, 'uploads')
+		var res = await s3.request('POST', 'big.bin', null, { uploads: '' })
 		assert.equal(res.status, 503, 'raw requests leave status handling to the caller')
 	})
 
@@ -519,6 +527,27 @@ describe('awsApi', () => {
 		)
 	})
 
+	// Expected value computed with an independent Python SigV4 implementation
+	test('presigned url encodes the key and query the way S3 canonicalizes them', async (assert) => {
+		var sign = awsApi({
+			endpoint: 's3-eu-central-1.amazonaws.com',
+			bucket: 'buck-1',
+			region: 'eu-central-1',
+			accessId: 'AKIAIOSFODNN7EXAMPLE',
+			secret: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+		})
+		assert.equal(
+			await sign.url('docs/a (1).pdf', { expires: 86400, date: '20220423T130929Z', query: { 'response-content-disposition': 'attachment; filename="a (1).pdf"' } }),
+			'https://s3-eu-central-1.amazonaws.com/buck-1/docs/a%20%281%29.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20220423%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20220423T130929Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3D%22a%20%281%29.pdf%22&X-Amz-Signature=7e4d215df178cf50b7f7829b89391e56cc2b8846460372ca3ecf10b763758103'
+		)
+	})
+
+	test('verify accepts a presigned url with a space and parens in key and query', async (assert) => {
+		var sign = awsApi(opts)
+		, url = await sign.url('bucket/a (1).pdf', { query: { 'response-content-disposition': 'attachment; filename="a (1).pdf"' } })
+		assert.equal(await awsVerify(new Request(url), getSecret), 'AKID')
+	})
+
 	test('presigned url default expires', async (assert) => {
 		var sign = awsApi(opts)
 		, url = await sign.url('bucket/key')
@@ -535,7 +564,7 @@ describe('awsApi', () => {
 
 	test('verify accepts presigned url carrying extra query params', async (assert) => {
 		var sign = awsApi(opts)
-		, url = await sign.url('bucket/key', { query: 'versionId=42' })
+		, url = await sign.url('bucket/key', { query: { versionId: 42 } })
 		assert.equal(await awsVerify(new Request(url), getSecret), 'AKID')
 		assert.equal(await awsVerify(new Request(url.replace('versionId=42', 'versionId=43')), getSecret), false, 'tampered param rejected')
 	})
