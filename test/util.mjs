@@ -5,7 +5,7 @@ import {
 	b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	isArr, isFn, isNum, anyObj, isObj, isStr,
-	getProto, joinBuf, now, ownSlot, sha256, ts,
+	getProto, joinBuf, now, ownSlot, sha256, sleep, ts,
 	toNum, toStr, toUint,
 } from '../util.mjs'
 
@@ -165,6 +165,18 @@ describe('util.mjs', () => {
 		.ok(ts() >= ms / 1000 >>> 0 && ts() - ms / 1000 < 1)
 		.strictEqual(ts() % 1, 0)
 		.end()
+	})
+
+	test('sleep resolves after the given milliseconds', async (assert, mock) => {
+		var done = 0
+		mock.time()
+		sleep(10).then(() => done = 1)
+		mock.tick(9)
+		await Promise.resolve()
+		assert.equal(done, 0, 'not yet')
+		mock.tick(1)
+		await Promise.resolve()
+		assert.equal(done, 1)
 	})
 
 	test('sha256 returns the raw digest of {0}, the caller picks the format', [

@@ -1,6 +1,6 @@
 
 import '@litejs/cli/test.js'
-import { App } from '../index.mjs'
+import { App, sleep } from '../index.mjs'
 import { DurableObject, Server as ServerSW, env as envSW, serve as serveSW, serveCache } from '../lib/browser.mjs'
 import { Server as ServerFastly, env as envFastly } from '../lib/fastly.mjs'
 import * as vercel from '../lib/vercel.mjs'
@@ -17,7 +17,6 @@ import { fileURLToPath } from 'node:url'
 var skip = typeof Bun !== 'undefined' || typeof Deno !== 'undefined'
 , serveNode = skip ? null : async (...args) => (await import('../lib/node.mjs')).serve(...args)
 , fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
-, sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 // Poll until the server answers, decoupled from any adapter-specific readiness event.
 , untilReady = async (get, last) => {
 	for (var i = 0; i < 100; i++) try { return await get() } catch (e) { last = e, await sleep(20) }

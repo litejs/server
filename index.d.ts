@@ -26,6 +26,7 @@ export function hex(val: unknown): string
 export function now(): number
 export function ts(): number
 export function sha256(val: string | ArrayBuffer | Uint8Array | number[]): Promise<ArrayBuffer>
+export function sleep(ms?: number): Promise<void>
 // a non-enumerable, non-writable slot, invisible to spread and JSON
 export function hide<T extends object>(obj: T, key: PropertyKey, value: unknown): T
 export const isArr: typeof Array.isArray

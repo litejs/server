@@ -1,6 +1,6 @@
 
 import '@litejs/cli/test.js'
-import { App } from '../index.mjs'
+import { App, sleep } from '../index.mjs'
 import { serveRange, toHandler } from '../lib/serve.mjs'
 // serveStatic is built per runtime from staticFrom(); this is the node one.
 import { serveStatic } from '../lib/env.mjs'
@@ -96,7 +96,6 @@ describe('serveRange', () => {
 	var body = '0123456789'
 	, full = () => new Response(body, { headers: { 'content-length': '10', 'content-type': 'text/plain' } })
 	, get = headers => new Request('http://localhost/f', { headers })
-	, settle = () => new Promise(resolve => setTimeout(resolve))
 
 	it('serves {0} as bytes {1}', [
 		['bytes=0-3', '0-3/10', '0123'],
@@ -174,7 +173,7 @@ describe('serveRange', () => {
 		assert.equal((await res.arrayBuffer()).byteLength, 10, 'only the window is delivered')
 		assert.ok(pulled < 4, 'the source is read a chunk at a time, got ' + pulled)
 		// The pipe releases the source a tick after the consumer sees the end
-		await settle()
+		await sleep()
 		assert.equal(cancelled, 1, 'the source is cancelled once the window is served')
 	})
 
@@ -189,7 +188,7 @@ describe('serveRange', () => {
 		, reader = res.body.getReader()
 		await reader.read()
 		await reader.cancel()
-		await settle()
+		await sleep()
 		assert.equal(cancelled, 1, 'the upstream body is released, not left open')
 	})
 
@@ -308,11 +307,11 @@ describe('handler', () => {
 		mock.swap(console, 'error', mock.fn())
 		var res = await send(req => (req.defer(() => { throw Error('later') }), 404), '/')
 		assert.equal(res.status, 404)
-		await new Promise(r => setTimeout(r))
+		await sleep()
 		assert.equal(console.error.called, 1, 'the rejection is logged, not thrown')
 
 		await send(req => (req.defer(() => { throw 'later' }), 204), '/')
-		await new Promise(r => setTimeout(r))
+		await sleep()
 		assert.equal(console.error.calls[1].args[0], 'later', 'falls back to the value when there is no stack')
 	})
 
