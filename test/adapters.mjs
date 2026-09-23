@@ -281,19 +281,21 @@ describe('node adapter', !skip && (() => {
 describe('function adapters', () => {
 	if (skip) return
 
-	test('{0}: Server() serves the shared env when the platform calls fetch without one', [
+	test('{0}: Server() serves the shared env, loaded from process.env, when the platform calls fetch without one', [
 		[ 'vercel', vercel, server => server.fetch ],
 		[ 'netlify', netlify, server => server ],
-	], async (name, runtime, fetchOf, assert) => {
+	], async (name, runtime, fetchOf, assert, mock) => {
 		var app = App()
-		app.get('fn', (req, env) => name + '-ok ' + env.SHARED)
+		app.get('fn', (req, env) => name + '-ok ' + env.SHARED + ' ' + env.PLATFORM)
 		assert.ok(runtime.env && runtime.env !== envFastly, 'exports the node-side shared env')
 		assert.equal(runtime.serve, undefined, 'no listener on a function host')
 
+		mock.swap(process.env, 'PLATFORM', 'secret')
 		runtime.env.SHARED = 'binding'
 		var res = await fetchOf(runtime.Server(app))(new Request('http://localhost/fn'))
-		assert.equal(await res.text(), name + '-ok binding')
+		assert.equal(await res.text(), name + '-ok binding secret')
 		delete runtime.env.SHARED
+		delete runtime.env.PLATFORM
 	})
 })
 
