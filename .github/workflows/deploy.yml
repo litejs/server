@@ -16,6 +16,7 @@ jobs:
         - { id: deno, name: Deno, url: https://litejs-server-demo.litejs.deno.net }
         - { id: fastly, name: Fastly, url: https://nearly-equal-jennet.edgecompute.app }
         - { id: netlify, name: Netlify, url: https://litejs-server-demo.netlify.app }
+        - { id: neon, name: Neon, url: https://br-blue-recipe-b1dowdpw-api.compute.c-5.eu-central-1.aws.neon.tech }
         - { id: vercel, name: Vercel, url: https://litejs-server-demo.vercel.app }
     env:
       TEST_RUNTIME: ${{ matrix.name }}
@@ -42,6 +43,7 @@ jobs:
         DENO_DEPLOY_TOKEN: ${{ matrix.id == 'deno' && secrets.DENO_TOKEN || '' }}
         FASTLY_API_TOKEN: ${{ matrix.id == 'fastly' && secrets.FASTLY_TOKEN || '' }}
         NETLIFY_AUTH_TOKEN: ${{ matrix.id == 'netlify' && secrets.NETLIFY_TOKEN || '' }}
+        NEON_API_KEY: ${{ matrix.id == 'neon' && secrets.NEON_TOKEN || '' }}
         VERCEL_TOKEN: ${{ matrix.id == 'vercel' && secrets.VERCEL_TOKEN || '' }}
         WRANGLER_SEND_METRICS: "false"
     - run: |

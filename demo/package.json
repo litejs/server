@@ -16,6 +16,9 @@
     "netlify:build": "npm run -s build -- --conditions=netlify --platform=node --outfile=build/netlify/index.mjs",
     "netlify:deploy": "npx netlify-cli deploy --prod --json --site 2722e4b1-d26d-4ad8-81c2-a8444f8c33c5 --dir=public --functions=build/netlify",
     "netlify:run": "npx netlify-cli dev --offline --no-open --dir public --functions build/netlify",
+    "neon:build": "node ../lib/bin/lj-assets.mjs public > assets.mjs && npm run -s build -- --conditions=neon,vercel --platform=node --loader:.html=text --loader:.js=text --outfile=build/neon/index.mjs",
+    "neon:deploy": "neon deploy --update-existing --project-id steep-pine-55590466 --branch production",
+    "neon:run": "neon dev",
     "vercel:build": "npm run -s build -- --conditions=vercel --platform=node --outfile=api/index.mjs",
     "vercel:deploy": "npx vercel deploy --prod --yes --project prj_9PBWAxilrjSCpHXh8i80McRiwHgI --scope team_rikNGVyzKh84IjJDUtuZYGD6",
     "vercel:run": "npx vercel dev --local --listen 127.0.0.1:3000"
@@ -24,6 +27,7 @@
     "#env": {
       "workerd": "./env-none.mjs",
       "fastly": "./env-fastly.mjs",
+      "neon": "./env-fastly.mjs",
       "vercel": "./env-none.mjs",
       "netlify": "./env-none.mjs",
       "default": "./env-local.mjs"
@@ -35,6 +39,7 @@
   "devDependencies": {
     "@fastly/cli": "16.0.0",
     "@fastly/js-compute": "3.44.3",
+    "neon": "5.0.0",
     "wrangler": "4.123.0"
   }
 }
