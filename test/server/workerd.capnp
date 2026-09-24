@@ -16,12 +16,16 @@ const config :Workerd.Config = (
 const mainWorker :Workerd.Worker = (
 	modules = [(name = "main", esModule = embed "build/workerd.mjs")],
 	compatibilityDate = "2025-09-27",
-	durableObjectNamespaces = [(className = "Counter", uniqueKey = "litejs-e2e-counter", enableSql = true)],
+	durableObjectNamespaces = [
+		(className = "Counter", uniqueKey = "litejs-e2e-counter", enableSql = true),
+		(className = "Room", uniqueKey = "litejs-e2e-room", enableSql = true),
+	],
 	durableObjectStorage = (localDisk = "do-storage"),
 	bindings = [
 		(name = "KV", kvNamespace = "kv"),
 		(name = "R2", r2Bucket = "r2"),
 		(name = "COUNTER", durableObjectNamespace = "Counter"),
+		(name = "ROOM", durableObjectNamespace = "Room"),
 		(name = "ASSETS", service = "assets"),
 		(name = "S3_AWS_ID", fromEnvironment = "S3_AWS_ID"),
 		(name = "S3_AWS_SECRET", fromEnvironment = "S3_AWS_SECRET"),

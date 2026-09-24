@@ -2,6 +2,8 @@
 import { App } from '../../index.mjs'
 
 var app = App()
+// Echo over a WebSocket, upgraded on any path by the entry points
+, protocols = { echo: { message: (socket, data) => socket.send(data) }, '': { message: socket => socket.send('bare') } }
 
 app.get('/info', (req) => {
 	return { path: req.fullPath }
@@ -57,3 +59,4 @@ app.get('/r2', async (req, env) => {
 
 export default app
 
+export { protocols }

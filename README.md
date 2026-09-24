@@ -11,7 +11,7 @@ LiteJS Server &ndash; [![Coverage][1]][2] [![Size][3]][4] [![Buy Me A Tea][5]][6
 
 A small, zero-dependency HTTP application core that runs the same code across
 local runtimes (Bun, Deno, Node.js, txiki.js),
-cloud providers (Cloudflare Workers, Deno Deploy, Netlify, Vercel),
+cloud providers (Cloudflare Workers, Deno Deploy, Fastly, Neon, Netlify, Vercel),
 and browser service workers.
 
 ## Usage
@@ -88,7 +88,7 @@ Routes match against `path`, the raw, percent-encoded pathname;
 ### Request body
 
 Parse `application/json`, `application/x-www-form-urlencoded` and `multipart/form-data` into object, with `a[]=1&b[c]=2` syntax.
-Multipart is read from the req.body one part at a time.
+Multipart is streamed from req.body.
 
 ```javascript
 import { content } from "@litejs/server"
@@ -132,6 +132,42 @@ const api = App()
 api.use(async (req, env) => !(req.user = await basic(req, env, header(req, "authorization"), users)) && 401)
 api.get("me", req => ({ user: req.user }))
 ```
+
+
+### WebSockets
+
+On Bun, Deno, Node.js, txiki.js, Cloudflare, and Neon
+`WebSocketServer(protocols, next?)` upgrades req to first matching protocol, `''` for no-protocol.
+Each protocol holds optional listeners
+`{ open(soc, req, env, ctx), message(soc, data, env, ctx), close(soc, code, reason, env, ctx), error(socket, error, env, ctx) }`
+and the socket has `send()`, `close()` and `readyState`.
+Fastly, Netlify and Vercel throw on an upgrade.
+Cloudflare persist `soc.state` on Durable Object sleep.
+
+```javascript
+// Accept WebSockets on one route
+app.get("ws", WebSocketServer({
+    echo: { message: (soc, data) => soc.send(data) }
+}, () => 426))
+```
+
+`WebSocketDO` holds sockets in a Durable Object, tagged by protocol:
+
+```javascript
+export class Room extends WebSocketDO {
+    static ws = {
+        chat: { message: (soc, data, env, ctx) => ctx.getWebSockets("chat").forEach(peer => peer !== soc && peer.send(data)) }
+    }
+    static app = App().get("/", (req, env, ctx) => ({ peers: ctx.getWebSockets().length }))
+}
+
+app.get("room/{name}", (req, env) => env.ROOM.getByName(req.param.name).fetch(req))
+```
+
+`WebSocketClient(url, protocol, map, { delay, env, ctx })` connects with the same map,
+queues `send` until open and reconnects after a random `delay`, `[10000, 30000]` ms by default.
+
+
 
 ### Runtime environments
 

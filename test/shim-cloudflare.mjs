@@ -622,6 +622,28 @@ describe('DO', () => {
 		assert.end()
 	})
 
+	test('state lists accepted sockets by tag and keeps the object while one is open', (assert, mock) => {
+		mock.time()
+		var ns = makeNS(MyDO)
+		, stub = ns.getByName('room')
+		, a = { readyState: 1 }
+		, b = { readyState: 1 }
+		stub.ctx.acceptWebSocket(a, ['echo'])
+		stub.ctx.acceptWebSocket(b)
+		assert.equal(stub.ctx.getTags(a), ['echo'])
+		assert.equal(stub.ctx.getTags(b), [])
+		assert.throws(() => stub.ctx.getTags({}), /accepted/)
+		assert.equal(stub.ctx.getWebSockets(), [a, b])
+		assert.equal(stub.ctx.getWebSockets('echo'), [a])
+		mock.tick(600000)
+		assert.ok(ns.getByName('room') === stub, 'not evicted while a socket is open')
+		a.readyState = b.readyState = 3
+		assert.equal(stub.ctx.getWebSockets(), [], 'a closed socket drops off the list')
+		mock.tick(600000)
+		assert.ok(ns.getByName('room') !== stub, 'evicted once idle again')
+		assert.end()
+	})
+
 	test('alarm schedules retry on error', async (assert, mock) => {
 		class WithAlarm extends DurableObject {
 			alarm() { throw Error('fail') }

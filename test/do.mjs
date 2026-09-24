@@ -1,6 +1,6 @@
 
 import '@litejs/cli/test.js'
-import { DB, DO, migrate } from '../index.mjs'
+import { DB, DO, WebSocketDO, migrate } from '../index.mjs'
 
 
 describe('lib/do.mjs', () => {
@@ -70,6 +70,65 @@ describe('lib/do.mjs', () => {
 		// the schema table exists (would throw otherwise)
 		db.exec('INSERT INTO counter (id) VALUES (1)')
 		assert.end()
+	})
+})
+
+// The hibernation API's socket, with the attachment kept as the runtime keeps it: a copy
+var attach = (saved, saves = []) => ({
+	saves,
+	serializeAttachment: val => saves.push(saved = structuredClone(val)),
+	deserializeAttachment: () => saved ?? null,
+})
+// Cloudflare calls the class, which finds the map by the socket's first tag
+, deliver = (fns, method, ...args) => new (class extends WebSocketDO {
+	static ws = { p: fns }
+})({ getTags: () => ['p'], storage: {} }, 'ENV')[method](...args)
+
+describe('WebSocketDO socket state', () => {
+	test('loads from the attachment and saves after the listener', async assert => {
+		var ws = attach({ n: 1 })
+		, seen
+		await deliver({ message: (s, data, env, ctx) => (seen = [s.state.n, data, env, !!ctx.getTags], s.state.n++) }, 'webSocketMessage', ws, 'D')
+		assert.equal(seen, [1, 'D', 'ENV', true])
+		assert.equal(ws.deserializeAttachment(), { n: 2 }, 'a mutation is saved')
+	})
+
+	test('close and error get their own arguments, then env and ctx', assert => {
+		var seen = []
+		, fns = { close: (s, ...a) => seen.push(a.length, a[0], a[1], a[2]), error: (s, ...a) => seen.push(a.length, a[0], a[1]) }
+		// The runtime passes wasClean too
+		deliver(fns, 'webSocketClose', attach(), 1000, 'bye', true)
+		deliver(fns, 'webSocketError', attach(), 'E')
+		assert.equal(seen, [4, 1000, 'bye', 'ENV', 3, 'E', 'ENV'])
+		assert.end()
+	})
+
+	test('a live state is not replaced by the attachment', async assert => {
+		var ws = attach({ n: 9 })
+		, live = ws.state = { n: 1 }
+		await deliver({ message: s => assert.ok(s.state === live) }, 'webSocketMessage', ws)
+		assert.equal(ws.saves, [{ n: 1 }])
+	})
+
+	test('nothing to save costs no serialization', async assert => {
+		var ws = attach()
+		assert.equal(await deliver({}, 'webSocketMessage', ws), undefined, 'a missing listener is fine')
+		assert.equal(ws.state, null, 'the attachment was asked once')
+		assert.equal(ws.saves, [])
+	})
+
+	test('an async listener saves once it settles', async assert => {
+		var ws = attach()
+		, res = deliver({ message: async s => (await 0, s.state = 'late') }, 'webSocketMessage', ws)
+		assert.equal(ws.saves, [], 'not yet')
+		await res
+		assert.equal(ws.saves, ['late'])
+	})
+
+	test('a throw surfaces and leaves the attachment as it was', async assert => {
+		var ws = attach('old')
+		await deliver({ message: s => { s.state = 'new'; throw Error('boom') } }, 'webSocketMessage', ws).then(assert.fail, e => assert.equal(e.message, 'boom'))
+		assert.equal(ws.deserializeAttachment(), 'old')
 	})
 })
 

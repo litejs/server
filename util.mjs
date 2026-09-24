@@ -92,7 +92,7 @@ export {
 	Data,
 	b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
-	aProto, oProto, getProto, now, ownSlot, rand, setProto, sha256, sleep, ts,
+	aProto, oProto, getProto, now, ownSlot, rand, setProto, sha256, sleep, splitRe, ts,
 	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
 	joinBuf,
 	toNum, toStr, toUint,
