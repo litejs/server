@@ -2,8 +2,9 @@
 import '@litejs/cli/test.js'
 import { writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import timers from 'node:timers'
 import { join } from 'node:path'
-import { App, env, httpsRedirect, readCert, readFiles, loadEnv, serveStatic, setupShutdown } from '../index.mjs'
+import { App, env, httpsRedirect, readCert, readFiles, loadEnv, serveStatic, setupShutdown, unrefTimeout } from '../index.mjs'
 import { localServer } from '../lib/env.mjs'
 import { toHandler } from '../lib/serve.mjs'
 
@@ -190,6 +191,7 @@ describe('localServer', () => {
 		mock.swap(console, 'log', () => {})
 		mock.swap(process, 'env', {})
 		mock.time()
+		mock.swap(timers, 'setTimeout', (fn, ms) => setTimeout(fn, ms))
 		var handlers = {}
 		, exited = 0
 		mock.swap(process, 'on', (name, fn) => { handlers[name] = fn })
@@ -208,9 +210,19 @@ describe('localServer', () => {
 })
 
 describe('setupShutdown', () => {
+	test('unrefTimeout passes extra arguments to the callback', async (assert, mock) => {
+		mock.time()
+		mock.swap(timers, 'setTimeout', (fn, ms, ...args) => setTimeout(fn, ms, ...args))
+		var got
+		unrefTimeout((a, b) => got = [a, b], 10, 'x', 'y')
+		mock.tick(10)
+		assert.equal(got, ['x', 'y'])
+	})
+
 	test('wires signal handlers that close servers', async (assert, mock) => {
 		mock.swap(console, 'log', () => {})
 		mock.time()
+		mock.swap(timers, 'setTimeout', (fn, ms) => setTimeout(fn, ms))
 		var handlers = {}
 		mock.swap(process, 'on', (name, fn) => { handlers[name] = fn })
 		var exited = 0
@@ -280,18 +292,5 @@ describe('setupShutdown', () => {
 		setupShutdown([{ close() {} }, { close() {}, reload: () => reloaded++ }])
 		handlers.SIGHUP()
 		assert.equal(reloaded, 1, 'reload() is called on servers that support it')
-	})
-
-	stubbable && test('falls back to Deno.unrefTimer for numeric timer ids', async (assert, mock) => {
-		mock.swap(console, 'log', () => {})
-		var handlers = {}
-		mock.swap(process, 'on', (name, fn) => { handlers[name] = fn })
-		mock.swap(globalThis, 'setTimeout', () => 42)
-		var unreffed
-		mock.swap(globalThis, 'Deno', { unrefTimer: (id) => { unreffed = id } })
-
-		setupShutdown({ close() {} })
-		handlers.SIGTERM()
-		assert.equal(unreffed, 42, 'numeric timer ids are unref-ed via Deno.unrefTimer')
 	})
 })
