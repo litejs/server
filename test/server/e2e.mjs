@@ -82,6 +82,45 @@ describe('e2e {0} ' + base, [
 			var info = await (await get('/info')).json()
 			assert.equal(info.path, '/info', 'GET /info body')
 		})
+		test('WebSocket echo', async assert => {
+			var ws = new WebSocket('ws://127.0.0.1:' + port + '/any/path', 'echo')
+			, msg = new Promise((resolve, reject) => {
+				ws.onmessage = e => resolve(e.data)
+				ws.onerror = () => reject(Error('WebSocket failed'))
+			})
+			ws.onopen = () => ws.send('ping')
+			assert.equal(await msg, 'ping', 'echoed')
+			assert.equal(ws.protocol, 'echo', 'protocol negotiated')
+			ws.close()
+		})
+		test('WebSocket bare client', async assert => {
+			var ws = new WebSocket('ws://127.0.0.1:' + port + '/any/path')
+			, msg = new Promise((resolve, reject) => {
+				ws.onmessage = e => resolve(e.data)
+				ws.onerror = () => reject(Error('WebSocket failed'))
+			})
+			ws.onopen = () => ws.send('?')
+			assert.equal(await msg, 'bare', 'served by the empty entry')
+			ws.close()
+		})
+		test('WebSockets held by a Durable Object', async assert => {
+			var open = protocol => new Promise((resolve, reject) => {
+				var ws = new WebSocket('ws://127.0.0.1:' + port + '/room', protocol)
+				ws.onopen = () => resolve(ws)
+				ws.onerror = () => reject(Error('WebSocket failed'))
+			})
+			, reply = (ws, data) => new Promise(resolve => (ws.onmessage = e => resolve(e.data), ws.send(data)))
+			, echo = await open('echo')
+			, bare = await open()
+			, count = await open('count')
+			, tally = await open('tally')
+			assert.equal(await reply(echo, 'ping'), 'ping', 'echoed by the object')
+			assert.equal(await reply(bare, '?'), 'bare', 'the empty entry is tagged too')
+			assert.equal(await reply(count, '?'), '4', 'the state lists every socket')
+			assert.equal(await reply(tally, '?') + await reply(tally, '?'), '12', 'socket.state carries over between messages')
+			assert.equal(await (await fetch(base + '/room')).json(), { peers: 4 }, 'a plain request goes to the app')
+			echo.close(), bare.close(), count.close(), tally.close()
+		})
 		test('GET /kv', async assert => {
 			// KV round-trip: PUT stores a random value, GET reads the same back.
 			var value = 'kv-' + Math.random().toString(36).slice(2)

@@ -24,6 +24,8 @@ export default [{
 			setInterval: 'readonly',
 			setTimeout: 'readonly',
 			skipWaiting: 'readonly',
+			WebSocket: 'readonly',
+			WebSocketPair: 'readonly',
 			TextDecoder: 'readonly',
 			TextEncoder: 'readonly',
 			TransformStream: 'readonly',

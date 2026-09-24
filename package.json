@@ -32,6 +32,7 @@
       "deno": "./lib/deno.mjs",
       "fastly": "./lib/fastly.mjs",
       "netlify": "./lib/netlify.mjs",
+      "neon": "./lib/neon.mjs",
       "vercel": "./lib/vercel.mjs",
       "node": "./lib/node.mjs",
       "txiki": "./lib/txiki.mjs",

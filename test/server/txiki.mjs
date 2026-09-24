@@ -8,10 +8,11 @@
 // instead of the shared one.
 
 import {
-	DB, KV, R2, S3, durableObject, serve, serveStatic
+	DB, KV, R2, S3, WebSocketServer, durableObject, serve, serveStatic
 } from '../../index.mjs'
-import app from './app.mjs'
+import app, { protocols } from './app.mjs'
 import { Counter } from './counter.mjs'
+import { Room } from './room.mjs'
 
 
 const db = new DB(':memory:')
@@ -24,6 +25,7 @@ const env = {
 	R2: R2(db, 'r2'),
 }
 env.COUNTER = durableObject(Counter, doDir, env)
+env.ROOM = durableObject(Room, doDir, env)
 // Real S3 client, wired only when credentials are present.
 if (env.S3_AWS_ID && env.S3_AWS_SECRET) env.S3 = S3({
 	region: 'eu-north-1',
@@ -32,7 +34,9 @@ if (env.S3_AWS_ID && env.S3_AWS_SECRET) env.S3 = S3({
 	secret: env.S3_AWS_SECRET,
 })
 
-serve(app, env)
+const ws = WebSocketServer(protocols, app)
+// One room holds its sockets in a Durable Object
+serve((req, env, ctx) => req.path === '/room' ? env.ROOM.getByName('e2e').fetch(req) : ws(req, env, ctx), env)
 
 // Static files that Cloudflare serves from the ASSETS binding
 app.get('/{path*}', env.ASSETS.fetch)

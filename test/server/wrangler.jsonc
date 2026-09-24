@@ -19,11 +19,13 @@
 	],
 	"durable_objects": {
 		"bindings": [
-			{ "name": "COUNTER", "class_name": "Counter" }
+			{ "name": "COUNTER", "class_name": "Counter" },
+			{ "name": "ROOM", "class_name": "Room" }
 		]
 	},
 	"migrations": [
-		{ "tag": "v1", "new_sqlite_classes": ["Counter"] }
+		{ "tag": "v1", "new_sqlite_classes": ["Counter"] },
+		{ "tag": "v2", "new_sqlite_classes": ["Room"] }
 	],
 	"observability": {
 		"enabled": true

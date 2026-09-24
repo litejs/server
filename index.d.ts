@@ -308,6 +308,27 @@ export function createHash(algorithm: string): { update(data: unknown): { digest
 export function unrefTimeout<A extends unknown[]>(fn: (...args: A) => void, ms: number, ...args: A): unknown
 
 //
+// WebSockets - lib/ws.mjs, upgrade per runtime
+//
+
+export interface Socket {
+	readyState: number
+	send(data: string | ArrayBufferLike | ArrayBufferView): void
+	close(code?: number, reason?: string): void
+}
+export interface SocketMap {
+	open?(socket: Socket, req: ServerRequest | string, env: Env, ctx: Ctx): void
+	message?(socket: Socket, data: string | ArrayBuffer, env: Env, ctx: Ctx): void
+	close?(socket: Socket, code: number, reason: string, env: Env, ctx: Ctx): void
+	error?(socket: Socket, error: unknown, env: Env, ctx: Ctx): void
+}
+
+export function WebSocketServer(protocols: Record<string, SocketMap>, next?: Handler): Handler
+export function WebSocketClient(url: string, protocol: string | string[], handler: SocketMap, opts?: {
+	delay?: [number, number], env?: Env, ctx?: Ctx
+}): { send(data: string | ArrayBufferLike | ArrayBufferView): void, close(): void }
+
+//
 // DB - node:sqlite DatabaseSync, bun:sqlite on Bun, tjs:sqlite on txiki
 //
 
@@ -403,6 +424,9 @@ export interface DurableObjectState {
 	id: DurableObjectId
 	blockConcurrencyWhile<T>(fn: () => T | Promise<T>): Promise<T>
 	storage: DurableObjectStorage
+	acceptWebSocket(socket: Socket, tags?: string[]): void
+	getTags(socket: Socket): string[]
+	getWebSockets(tag?: string): Socket[]
 }
 
 export class DurableObject {
@@ -513,6 +537,14 @@ export function migrate(db: DB | SqlStorage, schema?: string[], migrations_table
 
 export class DO extends DurableObject {
 	static schema?: string[]
+}
+export class WebSocketDO extends DO {
+	static ws?: Record<string, SocketMap>
+	static app?: Handler
+	fetch(req: Request): Promise<Response>
+	webSocketMessage(socket: Socket, data: string | ArrayBuffer): unknown
+	webSocketClose(socket: Socket, code: number, reason: string): unknown
+	webSocketError(socket: Socket, error: unknown): unknown
 }
 
 //
