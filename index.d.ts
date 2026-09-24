@@ -304,6 +304,8 @@ export function remove(file: string): void
 export function resolve(...parts: string[]): string
 export function stat(file: string): Promise<{ isFile: boolean, size: number }>
 export function createHash(algorithm: string): { update(data: unknown): { digest(enc: string): string } }
+// setTimeout whose timer never holds the process open
+export function unrefTimeout<A extends unknown[]>(fn: (...args: A) => void, ms: number, ...args: A): unknown
 
 //
 // DB - node:sqlite DatabaseSync, bun:sqlite on Bun, tjs:sqlite on txiki
