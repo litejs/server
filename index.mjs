@@ -2,6 +2,7 @@
 export * from './util.mjs'
 export * from './event.mjs'
 export * from '#runtime'
+export * from './lib/auth.mjs'
 export * from './lib/shim-cloudflare.mjs'
 export { App, Router } from './app.mjs'
 export { accept, negotiate } from './accept.mjs'
