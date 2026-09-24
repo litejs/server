@@ -72,7 +72,7 @@ Thrown errors map to `err.code || 500`; 5xx bodies are kept generic.
 Defer work to be executed after a response is handled with `req.defer(fn)`;
 it runs through `ctx.waitUntil`, so a Worker stays alive for it.
 
-Requests include `param`, `path`, `fullPath`, `query`, `searchParams`, and `header(name)`.
+Requests include `param`, `path`, `fullPath`, `query` and `searchParams`.
 Routes match against `path`, the raw, percent-encoded pathname;
 `fullPath` and `param` values are decoded.
 
@@ -111,6 +111,27 @@ Limits `maxBodySize`, `maxFields`, `maxFieldSize`, `maxFiles` and `maxFileSize` 
 an unknown type a `415`.
 More types go in `accept`, an `accept()` rule to parser map merged over the built-in ones:
 `{ accept: { "text/csv;header=": (str, negod) => ... } }`.
+
+
+### Authentication
+
+`basic` and `digest` check an `Authorization` header against a stored HA1, `sha256(user:realm:pass)`, and return the user name.
+HA1 is a secret! It allow to log in without a password; encrypt it at rest if the store needs that.
+
+`Oauth({ providers, onProfile })` runs the authorization-code flow for a map of `{ auth, token, user }` URLs
+and hands `onProfile` the profile with the window id from `state`;
+`env.SIGN_KEY` signs the Digest `nonce` and the OAuth `state`, and each provider needs `env.{NAME}_ID` and `env.{NAME}_SECRET`.
+
+```javascript
+import { App, basic, header } from "@litejs/server"
+
+const users = (env, name) => env.USERS.get(name)
+const api = App()
+
+// A failed check gets a plain `401`, add `WWW-Authenticate` header to trigger browser's log in dialog
+api.use(async (req, env) => !(req.user = await basic(req, env, header(req, "authorization"), users)) && 401)
+api.get("me", req => ({ user: req.user }))
+```
 
 ### Runtime environments
 

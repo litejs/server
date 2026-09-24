@@ -133,6 +133,78 @@ export function accept<T>(choices: Record<string, T>): (header?: string | null) 
 export function negotiate(choices: Record<string, (data: any, negotiated: Negotiated) => BodyInit>): Handler
 
 //
+// lib/auth.mjs
+//
+
+// An Authorization scheme: returns the user name when the credential is valid, else falsy; the caller sets req.user.
+// users(env, name) gives the stored HA1 row; the realm is env.REALM. demo/hello.mjs dispatches them from the header.
+export type AuthScheme = (req: ServerRequest, env: Env, credential: string, users: Users) => string | false | undefined | Promise<string | false | undefined>
+export interface Users {
+	// the stored HA1 of the user, or nothing
+	(env: Env, username: string): string | null | undefined | Promise<string | null | undefined>
+}
+
+export function basicEnc(user: string, pass: string): string
+// Takes the full header or the bare credential and returns what basicEnc took, so the pair roundtrips
+export function basicDec(credential: string): [user: string, pass: string] | null
+// HA1 as RFC 7616 stores it: hex sha256 of user:realm:pass. The realm is the pepper.
+export function digestHA1(user: string, realm: string, pass: string): Promise<string>
+export const basic: AuthScheme
+// WWW-Authenticate value for a route that wants the browser's login dialog
+export function basicChallenge(env: Env): string
+
+export interface DigestParams {
+	username: string
+	realm: string
+	nonce: string
+	uri: string
+	response: string
+	algorithm?: string
+	qop?: string
+	nc?: string
+	cnonce?: string
+	opaque?: string
+	[param: string]: string | undefined
+}
+
+// Takes the full header or the bare credential
+export function digestDec(credential: string): DigestParams | false
+// SHA-256 only; any other algorithm gives null
+export function digestResponse(p: DigestParams, method: string, ha1: string): Promise<string | null>
+// Builds a client Authorization header value; the tests use it as the verifier's mirror
+export function digestEnc(p: Partial<DigestParams> & { username: string, realm: string, nonce: string, uri: string }, method: string, pass: string): Promise<string>
+// The nonce is seconds.mac, the last 20 chars of hmac(env.SIGN_KEY, seconds), valid for a minute
+export const digest: AuthScheme
+// WWW-Authenticate value for a route that wants the browser's login dialog
+export function digestChallenge(env: Env): Promise<string>
+
+export interface OauthProvider {
+	// the redirect appends client_id, redirect_uri, state and response_type=code
+	auth: string
+	token: string
+	user: string
+}
+export interface OauthToken {
+	access_token: string
+	token_type?: string
+	[field: string]: any
+}
+export interface OauthOptions {
+	// each one still needs {NAME}_ID and {NAME}_SECRET in env
+	providers: Record<string, OauthProvider>
+	// GitHub rejects API calls without a User-Agent and asks for the app's name, default LiteJS
+	agent?: string
+	// win is the window id carried in state, for the app to bind the user or keep the identity pending;
+	// profile is the id_token payload when the provider sent one (Google: sub, email, name, picture),
+	// else the userinfo response
+	onProfile?(req: ServerRequest, env: Env, info: { provider: string, token: OauthToken, profile: any, win: string }): unknown
+}
+
+// hmac(env.SIGN_KEY, req.device): the state is b64Url(csrf:window:returnTo)
+export function csrf(req: ServerRequest, env: Env): Promise<ArrayBuffer>
+export function Oauth(opts: OauthOptions): Handler
+
+//
 // content.mjs
 //
 
