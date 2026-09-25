@@ -8,6 +8,8 @@
 export const UNDEF: undefined
 export const aProto: typeof Array.prototype
 export function anyObj(obj: unknown): obj is object
+export function b32Dec(str: string, alphabet?: string): Uint8Array
+export function b32Enc(buf: unknown, alphabet?: string): string
 export function b64Arr(str: string): Uint8Array
 export function b64Dec(str: string): string
 export function b64Enc(buf: unknown): string
@@ -177,6 +179,9 @@ export function digestEnc(p: Partial<DigestParams> & { username: string, realm: 
 export const digest: AuthScheme
 // WWW-Authenticate value for a route that wants the browser's login dialog
 export function digestChallenge(env: Env): Promise<string>
+
+export function hotp(key: BufferSource, counter: number, digits?: number): Promise<string>
+export function totp(key: BufferSource, time?: number, digits?: number): Promise<string>
 
 export interface OauthProvider {
 	// the redirect appends client_id, redirect_uri, state and response_type=code
