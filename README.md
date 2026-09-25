@@ -118,7 +118,7 @@ More types go in `accept`, an `accept()` rule to parser map merged over the buil
 `basic` and `digest` check an `Authorization` header against a stored HA1, `sha256(user:realm:pass)`, and return the user name.
 HA1 is a secret! It allow to log in without a password; encrypt it at rest if the store needs that.
 
-`Oauth({ providers, onProfile })` runs the authorization-code flow for a map of `{ auth, token, user }` URLs
+`Oauth({ providers, onProfile })` runs the authorization-code flow for a map of `{ auth, token, user, iss? }` URLs
 and hands `onProfile` the profile with the window id from `state`;
 `env.SIGN_KEY` signs the Digest `nonce` and the OAuth `state`, and each provider needs `env.{NAME}_ID` and `env.{NAME}_SECRET`.
 
