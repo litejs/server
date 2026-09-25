@@ -188,6 +188,8 @@ export interface OauthProvider {
 	auth: string
 	token: string
 	user: string
+	// the id_token issuer, checked when set; Google uses both forms, ['https://accounts.google.com', 'accounts.google.com']
+	iss?: string | string[]
 }
 export interface OauthToken {
 	access_token: string

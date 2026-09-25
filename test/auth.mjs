@@ -1,7 +1,7 @@
 
 import '@litejs/cli/test.js'
 import {
-	b64Url, hmac, ts,
+	b64Dec, b64Url, hmac, ts,
 	Oauth,
 	basic, basicChallenge, basicDec, basicEnc,
 	digest, digestChallenge, digestDec, digestEnc, digestHA1, digestResponse,
@@ -235,7 +235,8 @@ describe('auth.mjs', () => {
 			google: {
 				auth: 'https://accounts.google.com/o/oauth2/v2/auth?scope=openid%20email%20profile',
 				token: 'https://oauth2.googleapis.com/token',
-				user: 'https://openidconnect.googleapis.com/v1/userinfo'
+				user: 'https://openidconnect.googleapis.com/v1/userinfo',
+				iss: ['https://accounts.google.com', 'accounts.google.com']
 			}
 		}
 		, env = { GITHUB_ID: 'id', GITHUB_SECRET: 'sec', GOOGLE_ID: 'gid', GOOGLE_SECRET: 'gsec', SIGN_KEY: 's3cret' }
@@ -253,6 +254,7 @@ describe('auth.mjs', () => {
 			mock.swap(globalThis, 'fetch', fn)
 			return fn
 		}
+		, idToken = claims => 'h.' + b64Url(JSON.stringify({ sub: '42', aud: 'gid', iss: 'accounts.google.com', exp: ts() + 60, ...claims })) + '.s'
 		, okFetch = mock => stubFetch(mock, { token: { access_token: 't1' }, user: { id: '1' } })
 
 		test('redirects to {0} with the state', [
@@ -290,14 +292,17 @@ describe('auth.mjs', () => {
 			.equal(fetch.calls.user.headers['user-agent'], 'my-app')
 		})
 
-		test('an id_token in the token response replaces the profile fetch', async (assert, mock) => {
-			var claims = { sub: '42', email: 'a@b.c' }
-			, fetch = stubFetch(mock, { token: { access_token: 't', id_token: 'h.' + b64Url(JSON.stringify(claims)) + '.s' } })
+		test('an id_token with {0} replaces the profile fetch', [
+			[ 'aud gid', { aud: 'gid' } ],
+			[ 'aud listing gid', { aud: ['other', 'gid'] } ],
+			[ 'the https iss', { iss: 'https://accounts.google.com' } ],
+		], async (_, claims, assert, mock) => {
+			var fetch = stubFetch(mock, { token: { access_token: 't', id_token: idToken(claims) } })
 			, captured
 			, r = req('google', 'https://app/auth/google?code=XYZ&state=' + await state())
 			assert
 			.equal(await Oauth({ providers, onProfile: (req, env, info) => (captured = info) })(r, env), 302)
-			.equal(captured.profile, claims)
+			.equal(captured.profile, JSON.parse(b64Dec(idToken(claims).split('.')[1])))
 			.strictEqual(fetch.calls.user, undefined, 'only the token endpoint was called')
 		})
 
@@ -340,6 +345,26 @@ describe('auth.mjs', () => {
 			assert
 			.equal(e.message, message)
 			.equal(e.code, 502)
+		})
+
+		test('throws a 502 for an id_token {0}', [
+			[ 'for another client', { aud: 'other' } ],
+			[ 'without aud', { aud: undefined } ],
+			[ 'that has expired', { exp: ts() - 1 } ],
+			[ 'without exp', { exp: undefined } ],
+			[ 'from another issuer', { iss: 'https://evil.example' } ],
+			[ 'without iss', { iss: undefined } ],
+		], async (_, claims, assert, mock) => {
+			stubFetch(mock, { token: { access_token: 't', id_token: idToken(claims) } })
+			var e = await Oauth({ providers })(req('google', 'https://app/auth/google?code=x&state=' + await state()), env).catch(e => e)
+			assert
+			.equal(e.message, 'google: Invalid id_token')
+			.equal(e.code, 502)
+		})
+
+		test('iss is not checked when the provider has none', async (assert, mock) => {
+			stubFetch(mock, { token: { access_token: 't', id_token: idToken({ aud: 'id', iss: 'anything' }) } })
+			assert.equal(await Oauth({ providers })(req('github', 'https://app/auth/github?code=x&state=' + await state()), env), 302)
 		})
 
 		test('the profile fetch sends {0} as token_type', [
