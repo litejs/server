@@ -18,6 +18,30 @@ var UNDEF
 , b64Dec = str => decodeURIComponent(escape(b64Raw(str)))
 , b64Enc = buf => btoa(isStr(buf) ? unescape(encodeURIComponent(buf)) : String.fromCharCode(...toUint(buf)))
 , b64Url = buf => b64Enc(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+// RFC 4648 base32
+, B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+, b32Dec = (str, alphabet = B32) => {
+	var c
+	, bits = 0
+	, val = 0
+	, out = []
+	for (c of str.toUpperCase().replace(/[\s=]/g, '')) {
+		val = val << 5 | alphabet.indexOf(c)
+		if ((bits += 5) > 7) out.push(val >>> (bits -= 8) & 255)
+	}
+	return new Uint8Array(out)
+}
+, b32Enc = (buf, alphabet = B32) => {
+	var c
+	, bits = 0
+	, val = 0
+	, out = ''
+	for (c of toUint(buf)) {
+		val = val << 8 | c
+		for (bits += 8; bits > 4; ) out += alphabet[val >>> (bits -= 5) & 31]
+	}
+	return bits ? out + alphabet[val << 5 - bits & 31] : out
+}
 , each = (arr, fn, scope, key) => {
 	if (arr) {
 		if (isStr(arr)) arr = arr.split(splitRe)
@@ -34,8 +58,8 @@ var UNDEF
 , setProto = Object.setPrototypeOf
 , hasOwn = Object.hasOwn
 , hide = (obj, key, value) => Object.defineProperty(obj, key, { value })
-, hmac = async (key, data) => crypto.subtle.sign('HMAC',
-	await crypto.subtle.importKey('raw', toUint(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']),
+, hmac = async (key, data, hash = 'SHA-256') => crypto.subtle.sign('HMAC',
+	await crypto.subtle.importKey('raw', toUint(key), { name: 'HMAC', hash }, false, ['sign']),
 	toUint(data)
 )
 , now = Date.now
@@ -90,7 +114,7 @@ var UNDEF
 export {
 	UNDEF,
 	Data,
-	b64Arr, b64Dec, b64Enc, b64Url,
+	b32Dec, b32Enc, b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	aProto, oProto, getProto, now, ownSlot, rand, setProto, sha256, sleep, splitRe, ts,
 	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,

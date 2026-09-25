@@ -2,7 +2,7 @@
 import '@litejs/cli/test.js'
 import {
 	Data,
-	b64Arr, b64Dec, b64Enc, b64Url,
+	b32Dec, b32Enc, b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	isArr, isFn, isNum, anyObj, isObj, isStr,
 	getProto, joinBuf, now, ownSlot, rand, sha256, sleep, ts,
@@ -45,6 +45,45 @@ describe('util.mjs', () => {
 			[scope, [2, 'b', obj]],
 		])
 		.end()
+	})
+
+	test('b32Dec decodes {0}', [
+		[ 'the RFC secret', 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', '12345678901234567890' ],
+		[ 'lower case with spaces and padding', 'mzxw 6yq=', 'foob' ],
+		[ 'the RFC 4648 vector', 'MZXW6YTBOI======', 'foobar' ],
+	], (_, str, out, assert) => {
+		assert.equal(new TextDecoder().decode(b32Dec(str)), out).end()
+	})
+
+	test('b32Enc RFC 4648 {0}', [
+		[ '', '' ],
+		[ 'f', 'MY' ],
+		[ 'fo', 'MZXQ' ],
+		[ 'foo', 'MZXW6' ],
+		[ 'foob', 'MZXW6YQ' ],
+		[ 'fooba', 'MZXW6YTB' ],
+		[ 'foobar', 'MZXW6YTBOI' ],
+	], (str, out, assert) => {
+		assert
+		.equal(b32Enc(str), out)
+		.equal(new TextDecoder().decode(b32Dec(out)), str, 'b32Dec reverses it')
+		.end()
+	})
+
+	test('b32Enc and b32Dec take another alphabet', assert => {
+		var hex32 = '0123456789ABCDEFGHIJKLMNOPQRSTUV'
+		assert
+		.equal(b32Enc('foobar', hex32), 'CPNMUOJ1E8')
+		.equal(new TextDecoder().decode(b32Dec('CPNMUOJ1E8======', hex32)), 'foobar')
+		.end()
+	})
+
+	test('b32Enc roundtrips random bytes', assert => {
+		for (var len = 0; len < 42; len++) {
+			var buf = rand(len)
+			assert.equal(b32Dec(b32Enc(buf)), buf)
+		}
+		assert.end()
 	})
 
 	test('Base64', assert => {

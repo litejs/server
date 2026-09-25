@@ -1,7 +1,12 @@
 
 import '@litejs/cli/test.js'
-import { Oauth, basic, basicChallenge, basicDec, basicEnc, csrf, digest, digestChallenge, digestDec, digestEnc, digestHA1, digestResponse } from '../index.mjs'
-import { b64Url, hmac, ts } from '../util.mjs'
+import {
+	b64Url, hmac, ts,
+	Oauth,
+	basic, basicChallenge, basicDec, basicEnc,
+	digest, digestChallenge, digestDec, digestEnc, digestHA1, digestResponse,
+	csrf, hotp, totp,
+} from '../index.mjs'
 
 describe('auth.mjs', () => {
 	test('basicEnc RFC 7617 - {0}', [
@@ -28,6 +33,32 @@ describe('auth.mjs', () => {
 
 	test('digestHA1 computes the RFC 7616 HA1', async assert => {
 		assert.equal(await digestHA1('Mufasa', 'http-auth@example.org', 'Circle of Life'), '7987c64c30e25f1b74be53f966b49b90f2808aa92faf9a00262392d7b4794232')
+	})
+
+	describe('one-time passwords', () => {
+		var key = new TextEncoder().encode('12345678901234567890')
+
+		test('hotp RFC 4226 counter {0}', [
+			[ 0, '755224' ],
+			[ 1, '287082' ],
+			[ 2, '359152' ],
+			[ 9, '520489' ],
+		], async (counter, code, assert) => {
+			assert.equal(await hotp(key, counter), code)
+		})
+
+		test('totp RFC 6238 at {0}', [
+			[ 59, '94287082' ],
+			[ 1111111109, '07081804' ],
+			[ 1234567890, '89005924' ],
+			[ 20000000000, '65353130' ],
+		], async (time, code, assert) => {
+			assert.equal(await totp(key, time, 8), code)
+		})
+
+		test('totp defaults to now', async assert => {
+			assert.equal(await totp(key), await totp(key, ts()))
+		})
 	})
 
 	test('basicChallenge quotes env.REALM', assert => {
