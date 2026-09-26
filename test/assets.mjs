@@ -6,43 +6,47 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mime, serveAssets } from '../index.mjs'
 
-var files = {
-	'/index.html': '<h1>Home</h1>',
-	'/app.js': 'console.log(1)',
-	'/img/pixel.png': new Uint8Array([ 137, 80, 78, 71 ]),
-	'/blob.bin': 'raw',
-}
-, get = (assets, path) => assets.fetch(new Request('http://localhost' + path))
 
 describe('serveAssets', () => {
-	test('serves a bundled file with its mime type', async assert => {
-		var res = await get(serveAssets(files), '/app.js')
+	var files = {
+		'index.html': '<h1>Home</h1>',
+		'app.js': 'console.log(1)',
+		'mod.mjs': 'export var x = 1',
+		'img/pixel.png': new Uint8Array([ 137, 80, 78, 71 ]),
+		'blob.bin': 'raw',
+	}
+	, assets = serveAssets(files)
+	, get = path => assets.fetch(new Request('http://localhost/' + path))
+
+	test('serve a bundled file {0}', [
+		[ '', mime.html, '<h1>Home</h1>' ],
+		[ 'index.html', mime.html, '<h1>Home</h1>' ],
+		[ 'app.js?ts', mime.js, 'console.log(1)' ],
+		[ 'mod.mjs', mime.js, 'export var x = 1' ],
+		[ 'img/pixel%2Epng', mime.png, '�PNG' ],
+	], async (file, type, body, assert) => {
+		var res = await get(file)
 		assert.equal(res.status, 200)
-		assert.equal(res.headers.get('content-type'), mime.js)
-		assert.equal(await res.text(), 'console.log(1)')
+		assert.equal(res.headers.get('content-type'), type)
+		assert.equal(await res.text(), body)
 	})
 
-	test('maps / to /index.html', async assert => {
-		var res = await get(serveAssets(files), '/')
+	test('serve 404', async assert => {
+		assert.equal(await get('nope'), 404)
+		assert.equal(await get('index.htm'), 404)
+		assert.equal(await get('index.htmll'), 404)
+	})
+
+	test('custom defaultMime/notFound', async assert => {
+		var assets = serveAssets(files, { defaultMime: 'text/plain', notFound: () => 'gone' })
+		, get = path => assets.fetch(new Request('http://localhost/' + path))
+		, res = await get('blob.bin')
+
 		assert.equal(res.status, 200)
-		assert.equal(res.headers.get('content-type'), mime.html)
-		assert.equal(await res.text(), '<h1>Home</h1>')
-	})
+		assert.equal(res.headers.get('content-type'), 'text/plain')
+		assert.equal(await res.text(), 'raw')
 
-	test('serves bytes as given and decodes the path', async assert => {
-		var res = await get(serveAssets(files), '/img/pixel%2Epng')
-		assert.equal(res.headers.get('content-type'), mime.png)
-		assert.equal(new Uint8Array(await res.arrayBuffer()), files['/img/pixel.png'])
-	})
-
-	test('unknown extensions get defaultMime', async assert => {
-		assert.equal((await get(serveAssets(files), '/blob.bin')).headers.get('content-type'), 'application/octet-stream')
-		assert.equal((await get(serveAssets(files, { defaultMime: 'text/plain' }), '/blob.bin')).headers.get('content-type'), 'text/plain')
-	})
-
-	test('a miss is notFound, 404 by default', async assert => {
-		assert.equal(await get(serveAssets(files), '/nope'), 404, 'a bare 404 for toHandler() to shape')
-		assert.equal(await get(serveAssets(files, { notFound: () => 'gone' }), '/nope'), 'gone')
+		assert.equal(await get('nope'), 'gone')
 	})
 })
 
@@ -61,8 +65,8 @@ describe('lj-assets', () => {
 				"import a1 from './public/sub/b.js'",
 				'',
 				'export var files = {',
-				"\t'/a.html': a0,",
-				"\t'/sub/b.js': a1",
+				"\t'a.html': a0,",
+				"\t'sub/b.js': a1",
 				'}',
 				'',
 			].join('\n'))
