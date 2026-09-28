@@ -536,6 +536,8 @@ export function startCron(
 //
 
 export function dedupe(handler: Handler, key?: string): Handler
+// cache: ms a record stays in memory after its last request, default 1000
+export function sharedKV(kv: KVNamespace, opts?: Parameters<KVNamespace["put"]>[2], map?: Map<string, unknown>, cache?: number): (req: ServerRequest, key: string) => Promise<Record<string, any>>
 
 //
 // lib/do.mjs

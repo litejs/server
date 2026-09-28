@@ -19,6 +19,7 @@ import {
 	awsVerify,
 	b64Url,
 	dedupe,
+	sharedKV,
 	durableObject,
 	each,
 	emit,
@@ -69,6 +70,8 @@ const routeMatch: RegExpExecArray | "" | null = router.match({} as ServerRequest
 
 const db = new DB(":memory:")
 const kv = KV(db, "kv")
+const counts = sharedKV(kv, { expirationTtl: 60 })
+app.get("count", async req => ++(await counts(req, "count")).n)
 const r2 = R2(db, "r2")
 loadEnv(false)
 const env = sharedEnv

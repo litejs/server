@@ -1,6 +1,6 @@
 
 import '@litejs/cli/test.js'
-import { dedupe } from '../index.mjs'
+import { dedupe, sharedKV } from '../index.mjs'
 
 describe('dedupe', () => {
 	// A gate lets a handler park mid-flight until the test opens it, so the
@@ -104,3 +104,153 @@ describe('dedupe', () => {
 	})
 })
 
+
+describe('sharedKV', () => {
+	function mockKV(data) {
+		var kv = {
+			gets: 0,
+			puts: [],
+			get: async key => (kv.gets++, key === 'fail' ? Promise.reject('boom') : data[key] ?? null),
+			put: async (key, val, opts) => { kv.puts.push([key, val, opts]) }
+		}
+		return kv
+	}
+
+	function req() {
+		var fns = []
+		return { defer: fn => fns.push(fn), end: () => Promise.all(fns.map(fn => fn('res'))) }
+	}
+
+	test('concurrent requests share one read and the last one writes', async assert => {
+		var kv = mockKV({ a: '{"n":1}' })
+		var get = sharedKV(kv, { expirationTtl: 60 }, undefined, 0)
+		var r1 = req(), r2 = req()
+		var [a, b] = await Promise.all([get(r1, 'a'), get(r2, 'a')])
+		assert.ok(a === b, 'same object for both')
+		assert.equal(kv.gets, 1)
+		a.n++
+		await r1.end()
+		assert.equal(kv.puts.length, 0, 'not written while a request is pending')
+		await r2.end()
+		assert.equal(kv.puts, [['a', '{"n":2}', { expirationTtl: 60 }]])
+	})
+
+	test('unchanged value is not written and a later call reads again', async assert => {
+		var kv = mockKV({ a: '{"n":1}' })
+		var get = sharedKV(kv, undefined, undefined, 0)
+		var r1 = req()
+		var a = await get(r1, 'a')
+		await r1.end()
+		assert.equal(kv.puts.length, 0)
+		var r2 = req()
+		assert.ok(await get(r2, 'a') !== a, 'fresh object after the batch ended')
+		assert.equal(kv.gets, 2)
+	})
+
+	test('missing, corrupt and non-object values fall back to {}', async assert => {
+		var kv = mockKV({ bad: '{"n":', num: '1', nul: 'null' })
+		var get = sharedKV(kv, undefined, undefined, 0)
+		var rs = ['missing', 'bad', 'num', 'nul'].map(key => [key, req()])
+		var vals = await Promise.all(rs.map(([key, r]) => get(r, key)))
+		assert.equal(vals, [{}, {}, {}, {}])
+		await Promise.all(rs.map(([, r]) => r.end()))
+		assert.equal(kv.puts.length, 0, 'not written when untouched')
+		var r = req()
+		;(await get(r, 'bad')).n = 1
+		await r.end()
+		assert.equal(kv.puts, [['bad', '{"n":1}', undefined]], 'replaced once changed')
+	})
+
+	test('failed read is shared, then freed for retry', async assert => {
+		var kv = mockKV({})
+		var get = sharedKV(kv, undefined, undefined, 0)
+		var out = await Promise.all([get(req(), 'fail'), get(req(), 'fail')].map(p => p.catch(e => e.message)))
+		assert.equal(out, ['boom', 'boom'])
+		assert.equal(kv.gets, 1)
+		await get(req(), 'fail').catch(() => {})
+		assert.equal(kv.gets, 2, 'retried after the failure')
+	})
+
+	test('a record stays cached after its last request, so one soon after shares it', async assert => {
+		var kv = mockKV({ a: '{"n":1}' })
+		var get = sharedKV(kv, undefined, undefined, 20)
+		var r1 = req()
+		var a = await get(r1, 'a')
+		var ended = r1.end()
+		await new Promise(r => setTimeout(r, 5))
+		var r2 = req()
+		assert.ok(await get(r2, 'a') === a, 'the same record, not read again')
+		assert.equal(kv.gets, 1)
+		await Promise.all([ended, r2.end()])
+		await get(req(), 'a')
+		assert.equal(kv.gets, 2, 'read again once it sat unused for cache ms')
+	})
+
+	test('a change made while a record stays cached is written when its request ends', async assert => {
+		var kv = mockKV({ a: '{"n":1}' })
+		var get = sharedKV(kv, undefined, undefined, 100)
+		var r1 = req(), r2 = req()
+		await get(r1, 'a')
+		var ended = r1.end()
+		await new Promise(r => setTimeout(r, 5))
+		;(await get(r2, 'a')).n = 2
+		r2.end()
+		await new Promise(r => setTimeout(r, 5))
+		assert.equal(kv.puts, [['a', '{"n":2}', undefined]], 'not once the record would be dropped')
+		await ended
+	})
+
+	// A put that waits for the test, as a store write that lands after the response would
+	function slowKV(data) {
+		var kv = mockKV(data)
+		kv.put = (key, val) => new Promise(done => kv.land = () => (kv.puts.push([key, val]), done()))
+		return kv
+	}
+
+	test('a request during the write shares the record instead of reading the store', async assert => {
+		var kv = slowKV({ a: '{"n":1}' })
+		var get = sharedKV(kv, undefined, undefined, 0)
+		var r1 = req(), r2 = req()
+		;(await get(r1, 'a')).n = 2
+		var written = r1.end()
+		var b = await get(r2, 'a')
+		assert.equal(b.n, 2, 'the value being written, not the stored one')
+		assert.equal(kv.gets, 1)
+		kv.land()
+		await written
+		await r2.end()
+		assert.equal(kv.puts, [['a', '{"n":2}']])
+		await get(req(), 'a')
+		assert.equal(kv.gets, 2, 'read again once the write landed and nothing held it')
+	})
+
+	test('a change made during the write is written after it', async assert => {
+		var kv = slowKV({ a: '{"n":1}' })
+		var get = sharedKV(kv, undefined, undefined, 0)
+		var r1 = req(), r2 = req()
+		;(await get(r1, 'a')).n = 2
+		var written = r1.end()
+		;(await get(r2, 'a')).n = 3
+		await r2.end()
+		assert.equal(kv.puts, [], 'no second write while the first is in flight')
+		kv.land()
+		await new Promise(r => setTimeout(r, 0))
+		kv.land()
+		await written
+		assert.equal(kv.puts, [['a', '{"n":2}'], ['a', '{"n":3}']])
+	})
+
+	test('a failed write is tried once more a second later', async (assert, mock) => {
+		var kv = mockKV({ a: '{"n":1}' })
+		var delays = []
+		var fails = 1
+		var get = sharedKV(kv, undefined, undefined, 0)
+		var r = req()
+		mock.swap(globalThis, 'setTimeout', (fn, ms) => (delays.push(ms), fn()))
+		kv.put = async (key, val) => { if (fails--) throw Error('429'); kv.puts.push([key, val]) }
+		;(await get(r, 'a')).n = 2
+		await r.end()
+		assert.equal(delays, [1000, 0], 'then it stays cached')
+		assert.equal(kv.puts, [['a', '{"n":2}']])
+	})
+})
