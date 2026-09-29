@@ -94,6 +94,9 @@ var UNDEF
 	for (out = new Uint8Array(len); j--;) out.set(p[j], len -= p[j].length)
 	return out
 }
+, jsonParse = str => {
+	try { return JSON.parse(str) } catch {}
+}
 , toNum = ((NUM_RE, NUM_MAP) => a => isNum(a) ? a : isStr(a) && (a = NUM_RE.exec(a)) ? a[1] * NUM_MAP[a[2]] : null)(
 	/^(-?\d+(?:\.\d*)?) *([kMGTP]i?|sec|min|hr|day|week|month|year|).?$/,
 	{
@@ -118,7 +121,7 @@ export {
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	aProto, oProto, getProto, now, ownSlot, rand, setProto, sha256, sleep, splitRe, ts,
 	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
-	joinBuf,
+	joinBuf, jsonParse,
 	toNum, toStr, toUint,
 }
 

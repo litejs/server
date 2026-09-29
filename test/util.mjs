@@ -5,7 +5,7 @@ import {
 	b32Dec, b32Enc, b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	isArr, isFn, isNum, anyObj, isObj, isStr,
-	getProto, joinBuf, now, ownSlot, rand, sha256, sleep, ts,
+	getProto, joinBuf, jsonParse, now, ownSlot, rand, sha256, sleep, ts,
 	toNum, toStr, toUint,
 } from '../util.mjs'
 
@@ -361,6 +361,17 @@ describe('util.mjs', () => {
 		var out = joinBuf(new Uint8Array([1, 2]), new Uint8Array([3]), new Uint8Array([4, 5]))
 		assert.equal([...out], [1, 2, 3, 4, 5])
 		assert.equal([...joinBuf()], [])
+		assert.end()
+	})
+
+	test('jsonParse {0}', [
+		[ '{"a":1}', { a: 1 } ],
+		[ '[1]', [1] ],
+		[ 'null', null ],
+		[ '{"a":', undefined ],
+		[ '', undefined ],
+	], (str, out, assert) => {
+		assert.equal(jsonParse(str), out, 'undefined when the string is no JSON')
 		assert.end()
 	})
 
