@@ -4,7 +4,7 @@ import {
 	Data,
 	b32Dec, b32Enc, b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
-	isArr, isFn, isNum, anyObj, isObj, isStr,
+	isArr, isErr, isFn, isNum, anyObj, isObj, isStr,
 	getProto, joinBuf, jsonParse, now, ownSlot, rand, sha256, sleep, ts,
 	toNum, toStr, toUint,
 } from '../util.mjs'
@@ -111,6 +111,21 @@ describe('util.mjs', () => {
 			fail('Payload Too Large', 413)
 		} catch (e) {
 			assert.equal([e.message, e.code], ['Payload Too Large', 413])
+		}
+		assert.end()
+	})
+
+	test('fail rethrows an Error as is, keeping its type, stack and code', assert => {
+		var err = Object.assign(new TypeError('boom'), { code: 'EBOOM' })
+		try {
+			fail(err)
+		} catch (e) {
+			assert.ok(e === err).equal(e.code, 'EBOOM')
+		}
+		try {
+			fail(err, 502)
+		} catch (e) {
+			assert.ok(e === err).equal(e.code, 502, 'a given code still wins')
 		}
 		assert.end()
 	})
@@ -293,6 +308,14 @@ describe('util.mjs', () => {
 			[[], false],
 			[null, false],
 		], (value, expected, assert) => assert.equal(isFn(value), expected).end())
+
+		test('isErr', [
+			[Error('x'), true],
+			[new TypeError('x'), true],
+			['x', false],
+			[{ message: 'x' }, false],
+			[null, false],
+		], (value, expected, assert) => assert.equal(isErr(value), expected).end())
 
 		test('isNum', [
 			[123, true],

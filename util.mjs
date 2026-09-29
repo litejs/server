@@ -50,8 +50,8 @@ var UNDEF
 	}
 }
 , fail = (err, code) => {
-	err = Error(err)
-	err.code = code
+	if (!isErr(err)) err = Error(err)
+	if (code) err.code = code
 	throw err
 }
 , getProto = Object.getPrototypeOf
@@ -81,6 +81,7 @@ var UNDEF
 , hex = val => Array.from(toUint(val), c => (c < 16 ? '0' : '') + c.toString(16)).join('')
 , anyObj = obj => !!obj && typeof obj === 'object'
 , isArr = Array.isArray
+, isErr = err => err instanceof Error
 , isExtensible = Object.isExtensible
 , isFn = fn => typeof fn === 'function'
 , isNum = num => typeof num === 'number' && num === num
@@ -120,7 +121,7 @@ export {
 	b32Dec, b32Enc, b64Arr, b64Dec, b64Enc, b64Url,
 	each, fail, getCookie, hasOwn, hide, header, hex, hmac,
 	aProto, oProto, getProto, now, ownSlot, rand, setProto, sha256, sleep, splitRe, ts,
-	isArr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
+	isArr, isErr, isExtensible, isFn, isNum, anyObj, isObj, isStr,
 	joinBuf, jsonParse,
 	toNum, toStr, toUint,
 }

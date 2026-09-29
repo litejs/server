@@ -19,7 +19,7 @@ export function Data<T extends object = Record<string, unknown>>(obj?: T, proto?
 export function each(arr: string | null | undefined, fn: (value: string, key: number, arr: string[]) => void, scope?: unknown): void
 export function each<T>(arr: T[] | null | undefined, fn: (value: T, key: number, arr: T[]) => void, scope?: unknown): void
 export function each<T>(arr: Record<string, T> | null | undefined, fn: (value: T, key: string, arr: Record<string, T>) => void, scope?: unknown): void
-export function fail(err?: string, code?: number): never
+export function fail(err?: unknown, code?: number): never
 export const getProto: typeof Object.getPrototypeOf
 export const hasOwn: typeof Object.hasOwn
 export function header(src: { headers?: Headers | { get(name: string): string | null } } | null | undefined, name: string): string
@@ -33,6 +33,7 @@ export function sleep(ms?: number): Promise<void>
 // a non-enumerable, non-writable slot, invisible to spread and JSON
 export function hide<T extends object>(obj: T, key: PropertyKey, value: unknown): T
 export const isArr: typeof Array.isArray
+export function isErr(err: unknown): err is Error
 export function isFn(fn: unknown): fn is (...args: any[]) => any
 export function isNum(num: unknown): num is number
 export function isObj(obj: unknown): obj is Record<string, unknown>
