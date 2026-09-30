@@ -202,14 +202,13 @@ export interface OauthOptions {
 	providers: Record<string, OauthProvider>
 	// GitHub rejects API calls without a User-Agent and asks for the app's name, default LiteJS
 	agent?: string
+	csrf(req: ServerRequest, env: Env): unknown
 	// win is the window id carried in state, for the app to bind the user or keep the identity pending;
 	// profile is the id_token payload when the provider sent one (Google: sub, email, name, picture),
 	// else the userinfo response
 	onProfile?(req: ServerRequest, env: Env, info: { provider: string, token: OauthToken, profile: any, win: string }): unknown
 }
 
-// hmac(env.SIGN_KEY, req.device): the state is b64Url(csrf:window:returnTo)
-export function csrf(req: ServerRequest, env: Env): Promise<ArrayBuffer>
 export function Oauth(opts: OauthOptions): Handler
 
 //

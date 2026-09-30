@@ -1,11 +1,11 @@
 
 import '@litejs/cli/test.js'
 import {
-	b64Dec, b64Url, hmac, ts,
+	b64Dec, b64Url, hmac, sha256, ts,
 	Oauth,
 	basic, basicChallenge, basicDec, basicEnc,
 	digest, digestChallenge, digestDec, digestEnc, digestHA1, digestResponse,
-	csrf, hotp, totp,
+	hotp, signs, totp,
 } from '../index.mjs'
 
 describe('auth.mjs', () => {
@@ -27,6 +27,7 @@ describe('auth.mjs', () => {
 		[ 'no colon', 'dXNlcg' ],
 		[ 'empty name', 'OnBhc3M' ],
 		[ 'bad base64', '@@' ],
+		[ 'bytes that are no UTF-8', '_w' ],
 	], (_, cred, assert) => {
 		assert.notOk(basicDec(cred)).end()
 	})
@@ -188,6 +189,13 @@ describe('auth.mjs', () => {
 			.ok(/^\d{10}\.[\w-]{20}$/.test(nonceOf(challenge)), 'nonce is seconds.mac, the mac cut to 20 chars')
 		})
 
+		test('accepts a nonce signed before the key was rotated', async assert => {
+			var nonce = nonceOf(await digestChallenge({ ...env, SIGN_KEY: 'old' }))
+			assert
+			.equal(await handler({ method: 'GET' }, { ...env, SIGN_KEY: 'new,old' }, await cred('alice', 'secret', nonce)), 'alice')
+			.notOk(await handler({ method: 'GET' }, { ...env, SIGN_KEY: 'new' }, await cred('alice', 'secret', nonce)))
+		})
+
 		test('accepts a response to its own nonce and returns the user', async assert => {
 			var r = { method: 'GET' }
 			assert
@@ -241,9 +249,11 @@ describe('auth.mjs', () => {
 		}
 		, env = { GITHUB_ID: 'id', GITHUB_SECRET: 'sec', GOOGLE_ID: 'gid', GOOGLE_SECRET: 'gsec', SIGN_KEY: 's3cret' }
 		, req = (provider, url, u = new URL(url)) => ({
-			url, device: 'dev-1', param: { provider }, origin: u.origin, fullPath: u.pathname, searchParams: u.searchParams, resHeaders: {}
+			url, device: { id: 'dev-1' }, param: { provider }, origin: u.origin, fullPath: u.pathname, searchParams: u.searchParams, resHeaders: {}
 		})
-		, state = async (win = '', returnTo = '') => b64Url(b64Url(await csrf({ device: 'dev-1' }, env)) + ':' + win + ':' + returnTo)
+		// A token bound to the device, as an app without a browser session could make
+		, csrf = async (req, env) => (await signs(env, 'csrf', req.device.id))[0]
+		, state = async (win = '', returnTo = '', e = env) => b64Url(await csrf({ device: { id: 'dev-1' } }, e) + ':' + win + ':' + returnTo)
 		, stubFetch = (mock, responses) => {
 			var calls = {}
 			, fn = async (url, opts) => {
@@ -263,8 +273,29 @@ describe('auth.mjs', () => {
 		], async (provider, start, assert) => {
 			var r = req(provider, 'https://app/auth/' + provider + '?state=' + await state())
 			assert
-			.equal(await Oauth({ providers })(r, env), 302)
-			.equal(r.resHeaders.Location, start + '&redirect_uri=https%3A%2F%2Fapp%2Fauth%2F' + provider + '&state=' + await state() + '&response_type=code')
+			.equal(await Oauth({ providers, csrf })(r, env), 302)
+			.equal(r.resHeaders.Location.split('&code_challenge=')[0], start + '&redirect_uri=https%3A%2F%2Fapp%2Fauth%2F' + provider + '&state=' + await state() + '&response_type=code')
+			.ok(/&code_challenge=[\w-]{43}&code_challenge_method=S256$/.test(r.resHeaders.Location), 'PKCE')
+		})
+
+		test('the code verifier matches the challenge made for the same state, and no other', async (assert, mock) => {
+			var fetch = okFetch(mock)
+			, start = req('github', 'https://app/auth/github?state=' + await state('w1', '/'))
+			, back = req('github', 'https://app/auth/github?code=XYZ&state=' + await state('w1', '/'))
+			await Oauth({ providers, csrf })(start, env)
+			await Oauth({ providers, csrf })(back, env)
+			var challenge = new URL(start.resHeaders.Location).searchParams.get('code_challenge')
+			, verifier = new URLSearchParams('' + fetch.calls.token.body).get('code_verifier')
+			assert
+			.ok(/^[\w-]{43,128}$/.test(verifier), 'a verifier as RFC 7636 allows')
+			.equal(b64Url(await sha256(verifier)), challenge)
+			.notOk(verifier.includes(await csrf({ device: { id: 'dev-1' } }, env)), 'not the csrf, which travels in URLs')
+		})
+
+		test('refuses a state signed before the key was rotated', async assert => {
+			var r = req('github', 'https://app/auth/github?code=XYZ&state=' + await state('w1', '/', { SIGN_KEY: 'old' }))
+			await Oauth({ providers, csrf })(r, { ...env, SIGN_KEY: 'new,old' })
+			assert.equal(r.resStatus, 400, 'a login spanning the rotation starts again, as its PKCE verifier changed too')
 		})
 
 		test('exchanges the code, runs onProfile, then redirects to returnTo', async (assert, mock) => {
@@ -272,21 +303,21 @@ describe('auth.mjs', () => {
 			, captured
 			, r = req('github', 'https://app/auth/github?code=XYZ&state=' + await state('w1', '/dashboard#site/1'))
 			assert
-			.equal(await Oauth({ providers, onProfile: (req, env, info) => (captured = info) })(r, env), 302)
+			.equal(await Oauth({ providers, csrf, onProfile: (req, env, info) => (captured = info) })(r, env), 302)
 			.equal(r.resHeaders.Location, '/dashboard#site/1')
 			.equal(captured.provider, 'github')
 			.equal(captured.token.access_token, 't1')
 			.equal(captured.profile.id, '123')
 			.equal(captured.win, 'w1', 'the window named in state')
 			.equal(fetch.calls.token.method, 'POST')
-			.equal('' + fetch.calls.token.body, 'client_id=id&redirect_uri=https%3A%2F%2Fapp%2Fauth%2Fgithub&client_secret=sec&code=XYZ&grant_type=authorization_code')
+			.equal(('' + fetch.calls.token.body).split('&code_verifier=')[0], 'client_id=id&redirect_uri=https%3A%2F%2Fapp%2Fauth%2Fgithub&client_secret=sec&code=XYZ&grant_type=authorization_code')
 			.strictEqual(fetch.calls.token.headers['content-type'], undefined, 'fetch sets the form content type from the body')
 			.equal(fetch.calls.user.headers['user-agent'], 'LiteJS')
 		})
 
 		test('sends the agent as User-Agent', async (assert, mock) => {
 			var fetch = okFetch(mock)
-			await Oauth({ providers, agent: 'my-app' })(req('github', 'https://app/auth/github?code=XYZ&state=' + await state()), env)
+			await Oauth({ providers, csrf, agent: 'my-app' })(req('github', 'https://app/auth/github?code=XYZ&state=' + await state()), env)
 			assert
 			.equal(fetch.calls.token.headers['user-agent'], 'my-app')
 			.equal(fetch.calls.user.headers['user-agent'], 'my-app')
@@ -301,7 +332,7 @@ describe('auth.mjs', () => {
 			, captured
 			, r = req('google', 'https://app/auth/google?code=XYZ&state=' + await state())
 			assert
-			.equal(await Oauth({ providers, onProfile: (req, env, info) => (captured = info) })(r, env), 302)
+			.equal(await Oauth({ providers, csrf, onProfile: (req, env, info) => (captured = info) })(r, env), 302)
 			.equal(captured.profile, JSON.parse(b64Dec(idToken(claims).split('.')[1])))
 			.strictEqual(fetch.calls.user, undefined, 'only the token endpoint was called')
 		})
@@ -310,8 +341,52 @@ describe('auth.mjs', () => {
 			okFetch(mock)
 			var r = req('github', 'https://app/auth/github?code=XYZ&state=' + await state())
 			assert
-			.equal(await Oauth({ providers })(r, env), 302)
+			.equal(await Oauth({ providers, csrf })(r, env), 302)
 			.equal(r.resHeaders.Location, '/')
+		})
+
+		test('keeps the colons in returnTo', async (assert, mock) => {
+			okFetch(mock)
+			var r = req('github', 'https://app/auth/github?code=XYZ&state=' + await state('w1', '/at?t=12:30#/x:y'))
+			assert
+			.equal(await Oauth({ providers, csrf })(r, env), 302)
+			.equal(r.resHeaders.Location, '/at?t=12:30#/x:y')
+		})
+
+		test('redirects to / for a returnTo {0}', [
+			[ 'on another host', 'https://evil.example/' ],
+			[ 'that is protocol-relative', '//evil.example/' ],
+			[ 'that a browser reads as protocol-relative', '/\\evil.example/' ],
+			[ 'that is no path', 'dashboard' ],
+		], async (_, returnTo, assert, mock) => {
+			okFetch(mock)
+			var r = req('github', 'https://app/auth/github?code=XYZ&state=' + await state('w1', returnTo))
+			assert
+			.equal(await Oauth({ providers, csrf })(r, env), 302)
+			.equal(r.resHeaders.Location, '/')
+		})
+
+		test('csrf gives the token the state must carry', async (assert, mock) => {
+			okFetch(mock)
+			var csrf = () => 'mine'
+			, ok = req('github', 'https://app/auth/github?code=XYZ&state=' + b64Url('mine:w1:/done'))
+			, bad = req('github', 'https://app/auth/github?code=XYZ&state=' + await state('w1', '/done'))
+			assert
+			.equal(await Oauth({ providers, csrf })(ok, env), 302)
+			.equal(ok.resHeaders.Location, '/done')
+			.equal(await Oauth({ providers, csrf })(bad, env), { error: 'Invalid oauth state' }, 'no other token')
+		})
+
+		test('csrf is required, so an app picks how it binds the token', assert => {
+			assert.throws(() => Oauth({ providers }))
+			assert.end()
+		})
+
+		test('a csrf that gives nothing rejects even an empty state', async assert => {
+			var r = req('github', 'https://app/auth/github?code=1&state=' + b64Url('::/'))
+			assert
+			.equal(await Oauth({ providers, csrf: () => '' })(r, env), { error: 'Invalid oauth state' })
+			.equal(r.resStatus, 400)
 		})
 
 		test('rejects {0}', [
@@ -321,7 +396,7 @@ describe('auth.mjs', () => {
 		], async (_, query, assert) => {
 			var r = req('github', 'https://app/auth/github?code=1' + query)
 			assert
-			.equal(await Oauth({ providers })(r, env), { error: 'Invalid oauth state' })
+			.equal(await Oauth({ providers, csrf })(r, env), { error: 'Invalid oauth state' })
 			.equal(r.resStatus, 400)
 		})
 
@@ -329,7 +404,7 @@ describe('auth.mjs', () => {
 			[ 'an unknown provider', 'unknown', env ],
 			[ 'a provider without credentials', 'github', {} ],
 		], async (_, provider, env, assert) => {
-			assert.equal(await Oauth({ providers })(req(provider, 'https://app/auth/' + provider), env), 404)
+			assert.equal(await Oauth({ providers, csrf })(req(provider, 'https://app/auth/' + provider), env), 404)
 		})
 
 		// Thrown with code 502, so toHandler logs the cause and answers a plain 502
@@ -341,7 +416,7 @@ describe('auth.mjs', () => {
 			[ 'the profile endpoint fails', (n => () => n++ ? new Response('{}', { status: 403 }) : new Response('{"access_token":"t1"}'))(0), 'github: HTTP 403' ],
 		], async (_, fetch, message, assert, mock) => {
 			mock.swap(globalThis, 'fetch', fetch)
-			var e = await Oauth({ providers })(req('github', 'https://app/auth/github?code=x&state=' + await state()), env).catch(e => e)
+			var e = await Oauth({ providers, csrf })(req('github', 'https://app/auth/github?code=x&state=' + await state()), env).catch(e => e)
 			assert
 			.equal(e.message, message)
 			.equal(e.code, 502)
@@ -356,7 +431,7 @@ describe('auth.mjs', () => {
 			[ 'without iss', { iss: undefined } ],
 		], async (_, claims, assert, mock) => {
 			stubFetch(mock, { token: { access_token: 't', id_token: idToken(claims) } })
-			var e = await Oauth({ providers })(req('google', 'https://app/auth/google?code=x&state=' + await state()), env).catch(e => e)
+			var e = await Oauth({ providers, csrf })(req('google', 'https://app/auth/google?code=x&state=' + await state()), env).catch(e => e)
 			assert
 			.equal(e.message, 'google: Invalid id_token')
 			.equal(e.code, 502)
@@ -364,7 +439,7 @@ describe('auth.mjs', () => {
 
 		test('iss is not checked when the provider has none', async (assert, mock) => {
 			stubFetch(mock, { token: { access_token: 't', id_token: idToken({ aud: 'id', iss: 'anything' }) } })
-			assert.equal(await Oauth({ providers })(req('github', 'https://app/auth/github?code=x&state=' + await state()), env), 302)
+			assert.equal(await Oauth({ providers, csrf })(req('github', 'https://app/auth/github?code=x&state=' + await state()), env), 302)
 		})
 
 		test('the profile fetch sends {0} as token_type', [
@@ -372,8 +447,33 @@ describe('auth.mjs', () => {
 			[ 'Bearer', { access_token: 't1' } ],
 		], async (type, token, assert, mock) => {
 			var fetch = stubFetch(mock, { token, user: { id: '1' } })
-			await Oauth({ providers })(req('github', 'https://app/auth/github?code=XYZ&state=' + await state()), env)
+			await Oauth({ providers, csrf })(req('github', 'https://app/auth/github?code=XYZ&state=' + await state()), env)
 			assert.equal(fetch.calls.user.headers.authorization, type + ' t1')
+		})
+	})
+
+	describe('signs', () => {
+		test('signs with the first key of the ring and verifies with any of them', async assert => {
+			var [old] = await signs({ SIGN_KEY: 'old' }, 'p', 'x')
+			, macs = await signs({ SIGN_KEY: 'new,old' }, 'p', 'x')
+			assert
+			.equal(macs.length, 2)
+			.equal(macs[1], old, 'the old key still verifies')
+			.notEqual(macs[0], old, 'the new key signs')
+		})
+
+		test('gives each purpose a key of its own', async assert => {
+			var env = { SIGN_KEY: 'k' }
+			, [a] = await signs(env, 'a', 'x')
+			assert
+			.notEqual(a, (await signs(env, 'b', 'x'))[0])
+			.notEqual(a, b64Url(await hmac('k', 'x')), 'the ring key itself never signs')
+		})
+
+		test('refuses to sign without SIGN_KEY', async assert => {
+			var err
+			try { await signs({}, 'p', 'x') } catch (e) { err = e }
+			assert.equal(err?.message, 'SIGN_KEY is not set')
 		})
 	})
 })
