@@ -102,6 +102,7 @@ describe('util.mjs', () => {
 		assert.equal(b64Arr('w6k'), new Uint8Array([0xc3, 0xa9]))
 
 		assert.equal(b64Dec('!!!'), '')
+		assert.equal(b64Dec('_w'), '', 'bytes that are no UTF-8 decode to nothing, not a throw')
 		assert.end()
 	})
 
