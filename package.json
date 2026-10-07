@@ -1,6 +1,6 @@
 {
   "name": "@litejs/server",
-  "version": "26.9.0",
+  "version": "26.10.0",
   "type": "module",
   "description": "Server for LiteJS full-stack framework",
   "license": "MIT",
@@ -56,6 +56,6 @@
   "devDependencies": {
     "@litejs/cli": "26.8.0",
     "esbuild": "0.28.2",
-    "eslint": "10.10.0"
+    "eslint": "10.12.0"
   }
 }
