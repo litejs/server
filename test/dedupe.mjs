@@ -85,6 +85,27 @@ describe('dedupe', () => {
 		assert.equal(await b.text(), 'shared')
 	})
 
+	test('Response body is read once, not shared between requests', async assert => {
+		var g = gate()
+		, res = new Response('shared', { status: 201, headers: { 'x-a': '1' } })
+		, wrapped = dedupe(async () => (await g.promise, res))
+		, pending = [req('/res'), req('/res')].map(r => wrapped(r, {}, {}))
+		// workerd throws when a request touches a body stream made by another one
+		res.clone = () => { throw new Error('cloned across requests') }
+		g.open()
+		var [a, b] = await Promise.all(pending)
+		assert.equal([a.status, b.status], [201, 201])
+		assert.equal([a.headers.get('x-a'), b.headers.get('x-a')], ['1', '1'])
+		assert.equal([await a.text(), await b.text()], ['shared', 'shared'])
+	})
+
+	test('Response without body keeps a null-body status', async assert => {
+		var wrapped = dedupe(async () => new Response(null, { status: 204 }))
+		, out = await wrapped(req('/none'), {}, {})
+		assert.equal(out.status, 204)
+		assert.equal(out.body, null)
+	})
+
 	test('failure is shared by every waiter, then freed for retry', async assert => {
 		var calls = 0
 		var g = gate()
