@@ -58,6 +58,10 @@ jobs:
     - run: deno run -A node_modules/@litejs/cli/cli.js t 'test/*.mjs'
   E2E:
     runs-on: ubuntu-latest
+    # Runs share the real S3 key and counter, run one at a time
+    concurrency:
+      group: e2e
+      cancel-in-progress: false
     steps:
     - uses: actions/checkout@v7
     - uses: actions/setup-node@v7
