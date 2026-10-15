@@ -32,6 +32,7 @@ export default [{
 			tjs: 'readonly',
 			URL: 'readonly',
 			URLSearchParams: 'readonly',
+			WritableStream: 'readonly',
 			WebSocketPair: 'readonly'
 		}
 	},

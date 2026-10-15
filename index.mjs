@@ -10,5 +10,6 @@ export { content, querystring } from './content.mjs'
 export { dedupe, sharedKV } from './lib/dedupe.mjs'
 export { mime, serveAssets } from './lib/assets.mjs'
 export { DO, WebSocketDO, migrate } from './lib/do.mjs'
+export { mdns } from './lib/mdns.mjs'
 export { S3, awsApi, awsVerify } from './lib/s3.mjs'
 

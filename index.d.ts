@@ -311,6 +311,11 @@ export function remove(file: string): void
 export function resolve(...parts: string[]): string
 export function stat(file: string): Promise<{ isFile: boolean, size: number }>
 export function createHash(algorithm: string): { update(data: unknown): { digest(enc: string): string } }
+export function interfaces(): { address: string, netmask: string, family: 'IPv4' | 'IPv6', internal: boolean }[]
+export function udpServer(port: number, onMessage: (data: Uint8Array, addr: string, port: number) => void, opts?: {
+	group?: string, reuseAddr?: boolean, type?: 'udp4' | 'udp6'
+}): { send(data: Uint8Array, addr: string, port: number): void, close(): void }
+export function mdns(name: string): ReturnType<typeof udpServer>
 // setTimeout whose timer never holds the process open
 export function unrefTimeout<A extends unknown[]>(fn: (...args: A) => void, ms: number, ...args: A): unknown
 

@@ -19,6 +19,8 @@
     "neon:build": "node ../lib/bin/lj-assets.mjs public > assets.mjs && npm run -s build -- --conditions=neon,vercel --platform=node --loader:.html=text --loader:.js=text --outfile=build/neon/index.mjs",
     "neon:deploy": "neon deploy --update-existing --project-id steep-pine-55590466 --branch production",
     "neon:run": "neon dev",
+    "txiki:build": "npm run -s build -- --conditions=txiki --external:tjs:* --outfile=build/txiki/main.mjs && rm -rf build/txiki/public && cp -r public build/txiki/public",
+    "txiki:run": "tjs run build/txiki/main.mjs",
     "vercel:build": "npm run -s build -- --conditions=vercel --platform=node --outfile=api/index.mjs",
     "vercel:deploy": "npx vercel deploy --prod --yes --project prj_9PBWAxilrjSCpHXh8i80McRiwHgI --scope team_rikNGVyzKh84IjJDUtuZYGD6",
     "vercel:run": "npx vercel dev --local --listen 127.0.0.1:3000"
