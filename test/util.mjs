@@ -438,6 +438,9 @@ describe('util.mjs', () => {
 	test('toUint {0}', [
 		[ 'é', new Uint8Array([0xC3,0xA9]) ],
 		[ {a:1}, new Uint8Array([123,34,97,34,58,49,125]) ],
+		[ new Uint16Array([0x0201, 0x0403]), new Uint8Array([1,2,3,4]) ],
+		[ new Uint16Array([0x0201, 0x0403, 0x0605]).subarray(1, 2), new Uint8Array([3,4]) ],
+		[ new DataView(new Uint8Array([1,2,3]).buffer, 1), new Uint8Array([2,3]) ],
 	], (input, expected, assert) => assert.equal(toUint(input), expected).end())
 })
 

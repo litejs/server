@@ -116,6 +116,7 @@ var UNDEF
 , toStr = val => isStr(val) ? val : DEC.decode(toUint(val))
 , toUint = val => (
 	val instanceof Uint8Array ? val :
+	ArrayBuffer.isView(val) ? new Uint8Array(val.buffer, val.byteOffset, val.byteLength) :
 	val instanceof ArrayBuffer || isArr(val) ? new Uint8Array(val) :
 	ENC.encode(isStr(val) ? val : JSON.stringify(val))
 )
